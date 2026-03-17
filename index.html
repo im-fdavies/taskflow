@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TaskFlow</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="overlay">
+      <!-- State: listening -->
+      <div id="s-listening" class="state active">
+        <div class="ol-state">Listening</div>
+        <div class="ol-prompt">What are you switching to?</div>
+        <div class="mic-row">
+          <div class="mic"></div>
+          <div class="wave-bar" id="waveform"></div>
+        </div>
+        <div class="footer">
+          <span class="footer-text">Esc to cancel</span>
+          <span class="badge" id="current-task-badge">No active task</span>
+        </div>
+      </div>
+
+      <!-- State: exit -->
+      <div id="s-exit" class="state">
+        <div class="ol-state">Exit phase</div>
+        <div class="ol-prompt">Where are you leaving off?</div>
+        <div class="ol-sub" id="exit-context">Switching tasks. Bookmark where you are.</div>
+        <div class="mic-row">
+          <div class="mic"></div>
+          <div class="wave-bar" id="waveform-exit"></div>
+        </div>
+        <div class="footer">
+          <span class="badge badge-warn">Full protocol</span>
+          <span class="footer-text">Required before proceeding</span>
+        </div>
+      </div>
+
+      <!-- State: transition -->
+      <div id="s-transition" class="state">
+        <div class="ol-state">Transition</div>
+        <div class="ol-prompt">Switching context.</div>
+        <div class="bookmark">
+          <div class="bookmark-label">Bookmarked</div>
+          <div class="bookmark-text" id="bookmark-content">—</div>
+        </div>
+        <div class="footer">
+          <span class="footer-text">Saved to daily log</span>
+          <button class="btn btn-primary" onclick="app.advance('entry')">Continue</button>
+        </div>
+      </div>
+
+      <!-- State: entry -->
+      <div id="s-entry" class="state">
+        <div class="ol-state" id="entry-label">Entry</div>
+        <div class="ol-prompt" id="entry-task-name">—</div>
+        <div id="template-phases"></div>
+        <div class="footer">
+          <span class="badge" id="template-badge">—</span>
+          <button class="btn btn-primary" onclick="app.startTask()">Start task</button>
+        </div>
+      </div>
+
+      <!-- State: coaching -->
+      <div id="s-coaching" class="state">
+        <div class="ol-state">Signal detected</div>
+        <div class="sig-box sig-info" id="coaching-content">—</div>
+        <div class="btn-row">
+          <button class="btn" onclick="app.dismissCoaching('on_track')">On track</button>
+          <button class="btn btn-primary" onclick="app.dismissCoaching('stepping_back')">Stepping back</button>
+        </div>
+      </div>
+
+      <!-- State: gate -->
+      <div id="s-gate" class="state">
+        <div class="ol-state">Completion gate</div>
+        <div class="ol-prompt">Before you push</div>
+        <div class="sig-box sig-warn" id="gate-content">—</div>
+        <div class="btn-row">
+          <button class="btn" onclick="app.dismissGate(false)">Not yet</button>
+          <button class="btn btn-primary" onclick="app.dismissGate(true)">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/app.js"></script>
+  </body>
+</html>

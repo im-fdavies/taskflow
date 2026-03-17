@@ -1,0 +1,14 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for the TaskFlow overlay",
+  "windows": ["overlay"],
+  "permissions": [
+    "core:default",
+    "shell:default",
+    "global-shortcut:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-is-visible"
+  ]
+}

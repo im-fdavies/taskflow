@@ -1,0 +1,48 @@
+# PR Amends — Workflow Template
+# Triggered when switching to PR review feedback work
+
+id: pr-amends
+name: PR amends
+triggers:
+  - pr amends
+  - review feedback
+  - addressing comments
+  - pr changes
+  - reviewer asked
+  - amending pr
+
+phases:
+  - name: Survey all feedback first
+    guidance: Read every comment before changing code. What was this PR for?
+    colour: amber
+
+  - name: Fix in order
+    guidance: Structural first, surface last.
+    colour: teal
+
+  - name: Re-read diff before pushing
+    guidance: Full diff, as the reviewer would see it.
+    colour: purple
+
+signals:
+  - condition: phase_duration > 45m AND current_phase == "fix"
+    prompt: >
+      You've been deep in amends for a while —
+      still addressing feedback, or rabbit hole?
+    actions: [on_track, stepping_back]
+
+  - condition: architectural_comments >= 4
+    prompt: >
+      This looks like a rethink, not just amends.
+      Worth talking to the reviewer first?
+    actions: [proceed, talk_first]
+
+gates:
+  - before: complete
+    prompt: Have you re-read the full diff?
+    actions: [not_yet, done]
+
+clarification_context: >
+  The user is about to work on PR amends. Ask 1-2 questions
+  that help them understand the reviewer's intent, only if
+  their voice description was vague. Never ask generic questions.

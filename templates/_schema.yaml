@@ -1,0 +1,36 @@
+# Template Schema
+# All workflow templates must follow this structure.
+# Max 3 phases. Coaching prompts must be signal-triggered, never time-only.
+
+required_fields:
+  id: string           # Unique identifier (kebab-case)
+  name: string         # Display name shown in overlay
+  triggers: string[]   # Voice input keywords that select this template
+  phases: Phase[]      # Max 3 phases
+
+optional_fields:
+  signals: Signal[]    # Coaching prompts (must have a condition)
+  gates: Gate[]        # Confirmation before irreversible actions
+  clarification_context: string  # System prompt sent to Haiku for follow-up Qs
+
+Phase:
+  name: string         # One-line phase title
+  guidance: string     # One-sentence guidance (keep it short)
+  colour: string       # amber | teal | purple (maps to UI dot colours)
+
+Signal:
+  condition: string    # Expression evaluated by coaching engine
+  prompt: string       # Shown to user when signal fires
+  actions: string[]    # Button labels (max 2)
+
+Gate:
+  before: string       # When to show: "complete" | phase name
+  prompt: string       # Confirmation question
+  actions: string[]    # Button labels (max 2)
+
+# Design principles:
+# - 3 phases max per template
+# - Each phase is ONE sentence of guidance
+# - Every signal must have a condition (never just a timer)
+# - Gates only before irreversible actions
+# - "Would I skip this step?" — if yes, it shouldn't exist

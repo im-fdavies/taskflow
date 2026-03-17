@@ -1,0 +1,20 @@
+# Rust
+src-tauri/target/
+
+# Node
+node_modules/
+dist/
+
+# Logs (generated daily)
+logs/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Environment
+.env

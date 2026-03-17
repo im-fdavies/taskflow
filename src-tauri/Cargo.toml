@@ -1,0 +1,26 @@
+[package]
+name = "taskflow"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "taskflow_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
+dirs = "5"
+
+# Uncomment these as you reach each milestone:
+# cpal = "0.15"                    # P1: Audio capture
+# hound = "3.5"                    # P1: WAV encoding for Whisper
+# reqwest = { version = "0.12", features = ["json"] }  # P2: Claude API
+# tokio = { version = "1", features = ["full"] }        # P2: Async runtime
