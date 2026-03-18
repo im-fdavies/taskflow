@@ -13,11 +13,18 @@
         <div class="ol-state">Listening</div>
         <div class="ol-prompt">What are you switching to?</div>
         <div class="mic-row">
-          <div class="mic"></div>
+          <div class="mic" id="mic-dot"></div>
           <div class="wave-bar" id="waveform"></div>
         </div>
+        <!-- Recording/processing status -->
+        <div id="recording-status" class="recording-status" style="display:none;"></div>
+        <!-- Transcription result -->
+        <div id="transcription-result" class="transcription-result" style="display:none;"></div>
         <div class="footer">
-          <span class="footer-text">Esc to cancel</span>
+          <span class="footer-text" id="listening-hint">Speak, then press Enter</span>
+          <button class="btn btn-primary" id="btn-stop-recording" onclick="app.stopRecording()">Done</button>
+        </div>
+        <div class="footer" style="margin-top:6px;">
           <span class="badge" id="current-task-badge">No active task</span>
         </div>
       </div>

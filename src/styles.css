@@ -285,3 +285,25 @@ html, body {
   gap: 8px;
   justify-content: flex-end;
 }
+
+/* ---- Recording status / transcription result ---- */
+
+.recording-status {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
+  padding: 6px 0 2px;
+  letter-spacing: 0.01em;
+}
+
+.transcription-result {
+  background: rgba(255, 255, 255, 0.05);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 8px 0 4px;
+  font-size: 14px;
+  color: #e2e8f0;
+  line-height: 1.5;
+  min-height: 40px;
+}
