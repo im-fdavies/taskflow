@@ -27,6 +27,7 @@ class TaskFlowApp {
     this.pendingTask = null;
     this.transcription = "";
     this.mode = 1; // 1 = full, 2 = light, 3 = urgent
+    this._waveformInterval = null;
 
     // Audio recording — LISTENING state
     this._voiceCapture = new VoiceCapture({
@@ -378,7 +379,7 @@ class TaskFlowApp {
     if (this._voiceCapture.isRecording()) await this._voiceCapture.stop().catch(() => {});
     if (this._exitVoiceCapture.isRecording()) await this._exitVoiceCapture.stop().catch(() => {});
     if (this._exitBookmarkVoiceCapture.isRecording()) await this._exitBookmarkVoiceCapture.stop().catch(() => {});
-    await invoke("hide_overlay");
+    try { await invoke("hide_overlay"); } catch (e) { console.error("[TaskFlow] Failed to hide overlay:", e); }
   }
 
   // ---- Protocol: Listening → Confirmed → Exit ----
@@ -602,7 +603,7 @@ class TaskFlowApp {
     const notes = document.getElementById("exit-notes");
     const bookmarkNotes = document.getElementById("exit-bookmark");
     this._session.exitCapture = notes ? notes.value.trim() : "";
-    this._session.exitBookmark = bookmarkNotes ? bookmarkNotes.value.trim() : "";
+    this._session.extractedBookmark = bookmarkNotes ? bookmarkNotes.value.trim() : "";
     this.showTransitionState();
   }
 
