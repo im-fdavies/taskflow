@@ -210,92 +210,120 @@ class TaskFlowApp {
     return null;
   }
 
-  // ---- Task name extraction ----
-  // Strips mode-detection phrases to get the actual task name
+  // ---- Transcription parsing (marker-based) ----
+  // Finds semantic marker phrases in the transcription, splits at those positions,
+  // and extracts task name, exit context, and bookmark from the typed segments.
 
-  _extractTaskName(text) {
-    let cleaned = text.trim();
-
-    // Strip leading mode phrases
-    const stripPatterns = [
-      /^urgent[,.]?\s*/i,
-      /^i (need|want|have) to\s*/i,
-      /^(let me|let's|going to|i'm going to)\s*/i,
-      /^switching to\s*/i,
-      /^(done with|finished|completed).+?,\s*(moving on to|now|switching to|starting)\s*/i,
-      /^moving on to\s*/i,
-      /^continuing (with|on)\s*/i,
-      /^(interrupted|pulled away|got distracted)[^,]*,?\s*(need|want|have)?\s*to\s*/i,
-      /^in the middle of [^,]+,\s*(need|switching|want)?\s*(to\s*)?/i,
-      /^(fix|do|work on|handle|start|implement|write|address)\s+/i,
-    ];
-
-    for (const pattern of stripPatterns) {
-      cleaned = cleaned.replace(pattern, "");
-    }
-
-    // Trim punctuation and capitalize
-    cleaned = cleaned.replace(/[.!?]+$/, "").trim();
-    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-  }
-
-  // ---- Exit context extraction ----
-  // Parses the initial transcription for info about current/previous work
-
-  _extractExitContext(text) {
-    const result = { exitContext: null, bookmark: null };
+  _parseTranscription(text) {
+    const result = { taskName: null, exitContext: null, bookmark: null };
     if (!text) return result;
 
-    const lower = text.toLowerCase();
+    // Semantic markers ordered by specificity (most specific first within each type).
+    // Content AFTER each marker (until the next marker or end of text) belongs to that type.
+    const MARKERS = [
+      // Bookmark boundaries
+      { re: /\bwhen i (?:come back|return|get back),?\s*(?:i'll\s+)?/i, type: "bookmark" },
+      { re: /\b(?:need to |want to |should |i'll )?(pick up|come back to|remember to|get back to)\s+/i, type: "bookmark", keepVerb: true },
 
-    // Look for bookmark hints ("pick up X", "come back to X", "need to remember X")
-    const bookmarkPatterns = [
-      /(?:need to |want to |should )?(pick up|come back to|remember|get back to)\s+(.+?)(?:\s+when I (?:come back|return))?$/i,
+      // Exit markers (what user was/is doing — switching FROM)
+      { re: /\bi(?:'m| am) currently (?:working on|doing|on)\s+/i, type: "exit" },
+      { re: /\bcurrently (?:working on|doing|on)\s+/i, type: "exit" },
+      { re: /\bi was (?:working on|doing|in the middle of)\s+/i, type: "exit" },
+      { re: /\bi was\s+(?=\w+ing\b)/i, type: "exit" },
+      { re: /\bwas (?:working on|doing)\s+/i, type: "exit" },
+      { re: /\b(?:been doing|was on|coming from|leaving)\s+/i, type: "exit" },
+      { re: /\bdone with\s+/i, type: "exit" },
+      { re: /\bfinished(?:\s+with)?\s+/i, type: "exit" },
+
+      // Entry markers (what user is switching TO)
+      { re: /\bi(?:'m| am) (?:switching to|moving (?:on )?to|going to)\s+/i, type: "entry" },
+      { re: /\b(?:switching to|moving on to|moving to)\s+/i, type: "entry" },
+      { re: /\bneed to (?:switch to|do|work on|handle|look at)\s+/i, type: "entry" },
+      { re: /\bi (?:need|want|have) to\s+/i, type: "entry" },
+      { re: /\b(?:let me|i should(?:\s+probably)?)\s+/i, type: "entry" },
+
+      // Mode signal (urgent at start only)
+      { re: /^urgent\b[,.]?\s*/i, type: "mode_signal" },
     ];
-    for (const pat of bookmarkPatterns) {
-      const m = text.match(pat);
-      if (m && m[2]) {
-        let verb = m[1].trim();
-        let obj = m[2].replace(/[.!?,]+$/, "").trim();
-        let bm = verb.charAt(0).toUpperCase() + verb.slice(1) + " " + obj;
-        result.bookmark = bm;
-        break;
+
+    // Find first occurrence of each marker pattern in the text
+    const found = [];
+    for (const mk of MARKERS) {
+      const m = text.match(mk.re);
+      if (m) {
+        found.push({
+          start: m.index,
+          end: m.index + m[0].length,
+          type: mk.type,
+          matchText: m[0],
+          keepVerb: mk.keepVerb || false,
+          verbGroup: m[1] || null,
+        });
       }
     }
 
-    // Look for exit context patterns indicating current/previous work
-    // Capture groups include the verb phrase so "working on X" stays as "Working on X"
-    const exitPatterns = [
-      // "I'm currently working on X" / "I'm currently doing X"
-      /i(?:'m| am) currently ((?:working on|doing)\s+.+?)(?:[,.]?\s*(?:but|need|switching|moving|going|now|,)\s|$)/i,
-      // "I'm currently on X"
-      /i(?:'m| am) currently (on\s+.+?)(?:[,.]?\s*(?:but|need|switching|moving|going|now|,)\s|$)/i,
-      // "I'm working on X" / "I'm doing X"
-      /i(?:'m| am) ((?:working on|doing)\s+.+?)(?:[,.]?\s*(?:but|need|switching|moving|going|now|,)\s|$)/i,
-      // "I was working on X" / "I was doing X" / "I was in the middle of X"
-      /i was ((?:working on|doing|in the middle of)\s+.+?)(?:[,.]?\s*(?:but|need|switching|moving|going|now|,)\s|$)/i,
-      // "I was [verb]ing X" (catch-all for gerund phrases like "I was adding tests")
-      /i was (\w+ing\s+.+?)(?:[,.]?\s*(?:but|need|switching|moving|going|now|,)\s|$)/i,
-      // "was working on X" / "was doing X" (without leading "I")
-      /(?:^|,\s*)was ((?:working on|doing)\s+.+?)(?:[,.]?\s*(?:but|need|switching|moving|going|now|,)\s|$)/i,
-      // "was on X" / "been doing X" / "currently on X"
-      /(?:was on|been doing|currently on)\s+(.+?)(?:[,.]?\s*(?:but|need|switching|moving|going|now|,)\s|$)/i,
-      // "coming from X" / "leaving X"
-      /(?:coming from|leaving)\s+(.+?)(?:[,.]?\s*(?:but|need|switching|moving|going|now|,)\s|$)/i,
-    ];
+    // Sort by position; at same position prefer longer match. Deduplicate overlaps.
+    found.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+    const markers = [];
+    let lastEnd = -1;
+    for (const m of found) {
+      if (m.start >= lastEnd) {
+        markers.push(m);
+        lastEnd = m.end;
+      }
+    }
 
-    for (const pat of exitPatterns) {
-      const m = text.match(pat);
-      if (m && m[1]) {
-        let ctx = m[1].replace(/[.!?,]+$/, "").trim();
-        // Don't use if it's too short or looks like the task name
-        if (ctx.length > 2) {
-          result.exitContext = ctx.charAt(0).toUpperCase() + ctx.slice(1);
-          break;
+    console.log("[TaskFlow] Markers:", markers.map((m) => `${m.type}@${m.start}: "${m.matchText.trim()}"`));
+
+    // Build typed segments from the gaps between markers
+    const segments = [];
+
+    if (markers.length === 0) {
+      segments.push({ type: "unclassified", text: text.replace(/[.!?,\s]+$/, "").trim() });
+    } else {
+      // Any text before the first marker
+      if (markers[0].start > 0) {
+        const pre = text.substring(0, markers[0].start).replace(/[.!?,\s]+$/, "").trim();
+        if (pre) segments.push({ type: "pre", text: pre });
+      }
+
+      for (let i = 0; i < markers.length; i++) {
+        const mk = markers[i];
+        const nextStart = i + 1 < markers.length ? markers[i + 1].start : text.length;
+        let content = text.substring(mk.end, nextStart).replace(/^[.!?,\s]+/, "").replace(/[.!?,\s]+$/, "").trim();
+
+        if (mk.keepVerb && mk.verbGroup) {
+          content = mk.verbGroup + " " + content;
+        }
+
+        if (content) {
+          segments.push({ type: mk.type, text: content });
         }
       }
     }
 
+    console.log("[TaskFlow] Segments:", segments.map((s) => `${s.type}: "${s.text}"`));
+
+    const cap = (s) => {
+      if (!s) return null;
+      s = s.replace(/[.!?]+$/, "").trim();
+      return s ? s.charAt(0).toUpperCase() + s.slice(1) : null;
+    };
+
+    const entry = segments.find((s) => s.type === "entry");
+    const exit = segments.find((s) => s.type === "exit");
+    const bookmark = segments.find((s) => s.type === "bookmark");
+    const mode = segments.find((s) => s.type === "mode_signal");
+    const unclassified = segments.find((s) => s.type === "unclassified");
+    const pre = segments.find((s) => s.type === "pre");
+
+    // Task name: entry > mode_signal remainder > unclassified > pre-marker text > full text
+    result.taskName = cap(entry?.text) || cap(mode?.text) || cap(unclassified?.text) || cap(pre?.text) || cap(text);
+
+    if (exit) result.exitContext = cap(exit.text);
+    if (bookmark) result.bookmark = cap(bookmark.text);
+
+    console.log("[TaskFlow] Extracted:", result);
     return result;
   }
 
@@ -365,7 +393,7 @@ class TaskFlowApp {
     // Run rule-based detection first
     let { mode, confidence } = this.detectMode(this.transcription, currentTask);
     const template = this.matchTemplate(this.transcription);
-    const taskName = this._extractTaskName(this.transcription);
+    const { taskName, exitContext, bookmark } = this._parseTranscription(this.transcription);
 
     // Swap to confirmed sub-state
     const recording = document.getElementById("listening-recording");
@@ -421,10 +449,7 @@ class TaskFlowApp {
       modeBadge.className = `mode-badge ${modeClasses[mode] || "mode-full"}`;
     }
 
-    // Extract exit context from transcription
-    const { exitContext, bookmark } = this._extractExitContext(this.transcription);
-
-    // Store session data
+    // Store session data (exitContext + bookmark already extracted by _parseTranscription)
     this._session = {
       mode,
       confidence,
@@ -470,6 +495,7 @@ class TaskFlowApp {
 
   showExitState() {
     const { mode, taskName, extractedExit, extractedBookmark } = this._session;
+    console.log("[TaskFlow] EXIT pre-pop:", { extractedExit, extractedBookmark });
 
     const label = document.getElementById("exit-label");
     const prompt = document.getElementById("exit-prompt");
