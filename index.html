@@ -10,51 +10,85 @@
     <div id="overlay">
       <!-- State: listening -->
       <div id="s-listening" class="state active">
-        <div class="ol-state">Listening</div>
-        <div class="ol-prompt">What are you switching to?</div>
-        <div class="mic-row">
-          <div class="mic" id="mic-dot"></div>
-          <div class="wave-bar" id="waveform"></div>
+        <!-- Recording sub-state (visible while recording) -->
+        <div id="listening-recording">
+          <div class="ol-state">Listening</div>
+          <div class="ol-prompt">What are you switching to?</div>
+          <div class="mic-row">
+            <div class="mic" id="mic-dot"></div>
+            <div class="wave-bar" id="waveform"></div>
+          </div>
+          <div id="recording-status" class="recording-status" style="display:none;"></div>
+          <div class="footer">
+            <span class="footer-text" id="listening-hint">Speak, then press Enter</span>
+            <button class="btn btn-primary" id="btn-stop-recording" onclick="app.stopRecording()">Done</button>
+          </div>
+          <div class="footer" style="margin-top:6px;">
+            <span class="badge" id="current-task-badge">No active task</span>
+          </div>
         </div>
-        <!-- Recording/processing status -->
-        <div id="recording-status" class="recording-status" style="display:none;"></div>
-        <!-- Transcription result -->
-        <div id="transcription-result" class="transcription-result" style="display:none;"></div>
-        <div class="footer">
-          <span class="footer-text" id="listening-hint">Speak, then press Enter</span>
-          <button class="btn btn-primary" id="btn-stop-recording" onclick="app.stopRecording()">Done</button>
-        </div>
-        <div class="footer" style="margin-top:6px;">
-          <span class="badge" id="current-task-badge">No active task</span>
+
+        <!-- Confirmed sub-state (visible after transcription) -->
+        <div id="listening-confirmed" style="display:none;">
+          <div class="confirmed-header">
+            <span class="mode-badge" id="confirmed-mode-badge">Detecting…</span>
+          </div>
+          <div class="ol-prompt" id="confirmed-task-name">—</div>
+          <div class="confirmed-transcript" id="confirmed-transcript"></div>
+          <div id="urgent-progress" class="urgent-progress" style="display:none;">
+            <div class="urgent-progress-bar" id="urgent-progress-bar"></div>
+          </div>
+          <div class="footer">
+            <a class="try-again-link" id="try-again-link" href="#">Not right? Try again</a>
+            <button class="btn btn-primary" id="btn-confirmed-continue">Continue →</button>
+          </div>
         </div>
       </div>
 
       <!-- State: exit -->
       <div id="s-exit" class="state">
-        <div class="ol-state">Exit phase</div>
-        <div class="ol-prompt">Where are you leaving off?</div>
-        <div class="ol-sub" id="exit-context">Switching tasks. Bookmark where you are.</div>
-        <div class="mic-row">
-          <div class="mic"></div>
-          <div class="wave-bar" id="waveform-exit"></div>
+        <div class="ol-state" id="exit-label">Exit phase</div>
+        <div class="ol-prompt" id="exit-prompt">Where are you leaving off?</div>
+        <div class="ol-sub" id="exit-subtitle">Document the state of your work before switching.</div>
+        <div class="exit-input-row">
+          <textarea
+            id="exit-notes"
+            class="exit-textarea"
+            placeholder="What were you just doing? What state is it in?"
+            rows="3"
+          ></textarea>
+          <button class="exit-mic-btn" id="exit-mic-btn" title="Record voice note">🎤</button>
         </div>
+        <div class="prefilled-hint" id="exit-prefilled-hint" style="display:none;"></div>
+        <div class="ol-sub" id="exit-bookmark-label" style="display:none">What's the first thing you'd pick up if you came back to this?</div>
+        <div class="exit-input-row" id="exit-bookmark-row" style="display:none">
+          <textarea
+            id="exit-bookmark"
+            class="exit-textarea"
+            placeholder="First thing to pick up…"
+            rows="2"
+          ></textarea>
+          <button class="exit-mic-btn" id="exit-bookmark-mic-btn" title="Record voice note">🎤</button>
+        </div>
+        <div class="prefilled-hint" id="exit-bookmark-prefilled-hint" style="display:none;"></div>
         <div class="footer">
-          <span class="badge badge-warn">Full protocol</span>
-          <span class="footer-text">Required before proceeding</span>
+          <button class="btn" id="exit-skip-btn" style="display:none" onclick="app.skipExit()">Skip</button>
+          <button class="btn btn-primary" id="exit-submit-btn" onclick="app.submitExit()">Continue →</button>
         </div>
       </div>
 
       <!-- State: transition -->
       <div id="s-transition" class="state">
         <div class="ol-state">Transition</div>
-        <div class="ol-prompt">Switching context.</div>
-        <div class="bookmark">
-          <div class="bookmark-label">Bookmarked</div>
+        <div class="ol-prompt" id="transition-prompt">Switching context.</div>
+        <div class="bookmark" id="transition-bookmark">
+          <div class="bookmark-label">Exit capture</div>
           <div class="bookmark-text" id="bookmark-content">—</div>
         </div>
-        <div class="footer">
-          <span class="footer-text">Saved to daily log</span>
-          <button class="btn btn-primary" onclick="app.advance('entry')">Continue</button>
+        <div id="transition-auto-msg" class="ol-sub" style="display:none">Context boundary set.</div>
+        <div class="footer" id="transition-footer">
+          <span class="footer-text" id="transition-footer-text">Saved to daily log</span>
+          <button class="btn btn-primary" id="transition-confirm-btn" onclick="app.confirmTransition()">Confirmed</button>
         </div>
       </div>
 
@@ -62,7 +96,9 @@
       <div id="s-entry" class="state">
         <div class="ol-state" id="entry-label">Entry</div>
         <div class="ol-prompt" id="entry-task-name">—</div>
+        <div class="ol-sub" id="entry-mode-note" style="display:none"></div>
         <div id="template-phases"></div>
+        <div id="clarification-questions" style="display:none"></div>
         <div class="footer">
           <span class="badge" id="template-badge">—</span>
           <button class="btn btn-primary" onclick="app.startTask()">Start task</button>

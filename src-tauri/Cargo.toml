@@ -18,9 +18,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = "0.4"
 dirs = "5"
+serde_yaml = "0.9"              # P2: Template parsing
 
 # Uncomment these as you reach each milestone:
 # cpal = "0.15"                    # P1: Audio capture
 # hound = "3.5"                    # P1: WAV encoding for Whisper
-# reqwest = { version = "0.12", features = ["json"] }  # P2: Claude API
-# tokio = { version = "1", features = ["full"] }        # P2: Async runtime
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }  # P2: Claude API
+tokio = { version = "1", features = ["full"] }          # P2: Async runtime
+toml = "0.8"                                                    # P2: Config parsing
