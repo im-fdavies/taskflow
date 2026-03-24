@@ -367,6 +367,15 @@ class TaskFlowApp {
       if (this._exitBookmarkVoiceCapture && this._exitBookmarkVoiceCapture.isRecording()) {
         this._exitBookmarkVoiceCapture.stop().catch(() => {});
       }
+      // Reset exit interview nudge
+      const exitNudge = document.getElementById('exit-question-nudge');
+      if (exitNudge) exitNudge.style.display = 'none';
+      // Reset agent context button
+      const ctxBtn = document.getElementById('exit-context-btn');
+      if (ctxBtn) ctxBtn.style.display = 'none';
+      const ctxLoaded = document.getElementById('exit-context-loaded');
+      if (ctxLoaded) ctxLoaded.style.display = 'none';
+      this._agentContextContent = null;
     }
   }
 
@@ -411,7 +420,7 @@ class TaskFlowApp {
     const urgentProgress = document.getElementById("urgent-progress");
 
     if (taskEl) taskEl.textContent = `Switching to: ${taskName}`;
-    if (transcriptEl) transcriptEl.textContent = `"${this.transcription}"`;
+    if (transcriptEl) this._renderClickableTranscript(transcriptEl, this.transcription);
 
     // Wire up try-again link
     if (tryAgainLink) {
@@ -542,11 +551,13 @@ class TaskFlowApp {
       if (submitBtn) submitBtn.textContent = "Continue →";
     }
 
-    // Pre-populate exit notes from transcription extraction
+    // Pre-populate exit notes: set CSS class/hint before show(), but defer the
+    // value assignment to after show(). WKWebView resets textarea.value to the
+    // element's defaultValue ("") during first layout, which happens when the
+    // parent #s-exit transitions from display:none → display:flex via .active.
+    // Assigning after show() means the element is already laid out — no reset.
     if (extractedExit && notes) {
-      notes.value = extractedExit;
       notes.classList.add("prefilled");
-      // Show hint label
       const hintEl = document.getElementById("exit-prefilled-hint");
       if (hintEl) { hintEl.textContent = "From your description"; hintEl.style.display = "block"; }
     } else {
@@ -595,8 +606,15 @@ class TaskFlowApp {
     }
 
     this.show('exit');
-    // Focus the textarea after transition
+    // Apply value after show() — #s-exit is now display:flex so WKWebView
+    // won't reset the textarea on first layout.
+    if (extractedExit && notes) notes.value = extractedExit;
+    // Focus the textarea after transition, then fire exit interview question
     setTimeout(() => { if (notes) notes.focus(); }, 200);
+    if (mode !== 3) {
+      this._fetchExitQuestion();
+      this._checkAgentContext();
+    }
   }
 
   skipExitWithExtracted() {
@@ -605,6 +623,94 @@ class TaskFlowApp {
     this._session.exitCapture = notes ? notes.value.trim() : "";
     this._session.extractedBookmark = bookmarkNotes ? bookmarkNotes.value.trim() : "";
     this.showTransitionState();
+  }
+
+  async _fetchExitQuestion() {
+    const { transcription, exitCapture, extractedExit, taskName, template } = this._session;
+
+    const nudge = document.getElementById('exit-question-nudge');
+    const thinking = document.getElementById('exit-question-thinking');
+    const body = document.getElementById('exit-question-body');
+    const textEl = document.getElementById('exit-question-text');
+    if (!nudge || !thinking || !body || !textEl) return;
+
+    // Reset
+    nudge.style.display = 'block';
+    thinking.style.display = 'inline';
+    body.style.display = 'none';
+    textEl.textContent = '';
+
+    const exitContext = extractedExit || exitCapture || '';
+    const templateName = template ? (template.name || '') : '';
+
+    try {
+      const question = await Promise.race([
+        invoke('generate_exit_question', {
+          transcription: transcription || '',
+          exitContext,
+          taskName: taskName || '',
+          templateName,
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+      ]);
+
+      thinking.style.display = 'none';
+
+      if (!question) {
+        nudge.style.display = 'none';
+        return;
+      }
+
+      textEl.textContent = question;
+      body.style.display = 'flex';
+    } catch (err) {
+      // Silent fail — nudge stays hidden
+      nudge.style.display = 'none';
+      thinking.style.display = 'none';
+    }
+  }
+
+  async _checkAgentContext() {
+    const btn = document.getElementById('exit-context-btn');
+    if (!btn) return;
+
+    btn.style.display = 'none';
+    this._agentContextContent = null;
+
+    try {
+      const context = await invoke('read_agent_context');
+      if (context) {
+        this._agentContextContent = context;
+        btn.style.display = 'block';
+      }
+    } catch (err) {
+      // Silent fail — no context available
+    }
+  }
+
+  loadAgentContext() {
+    const btn = document.getElementById('exit-context-btn');
+    const notes = document.getElementById('exit-notes');
+    if (!this._agentContextContent || !notes) return;
+
+    // Append context to existing notes (don't replace what the user typed)
+    const existing = notes.value.trim();
+    const separator = existing ? '\n\n---\n' : '';
+    notes.value = existing + separator + this._agentContextContent;
+    notes.classList.add('prefilled');
+
+    // Replace the button with a "loaded" confirmation
+    if (btn) {
+      btn.style.display = 'none';
+    }
+    const loadedEl = document.getElementById('exit-context-loaded');
+    if (loadedEl) {
+      loadedEl.style.display = 'block';
+    }
+
+    // Focus at end of textarea
+    notes.focus();
+    notes.setSelectionRange(notes.value.length, notes.value.length);
   }
 
   submitExit() {
@@ -977,6 +1083,319 @@ class TaskFlowApp {
     this.populateWaveform("waveform");
     this.startWaveform("waveform");
     this.startRecording();
+  }
+
+  // ---- Inline transcription correction ----
+
+  _renderClickableTranscript(container, text) {
+    container.innerHTML = '';
+    this._selectedRange = null; // track shift-click range
+
+    const quote = (side) => {
+      const q = document.createElement('span');
+      q.textContent = side === 'open' ? '\u201c' : '\u201d';
+      q.className = 'transcript-quote';
+      return q;
+    };
+    container.appendChild(quote('open'));
+
+    // Split preserving whitespace so we can reconstruct
+    const tokens = text.split(/(\s+)/);
+    this._transcriptTokens = tokens;
+
+    tokens.forEach((token, i) => {
+      if (/^\s+$/.test(token)) {
+        container.appendChild(document.createTextNode(token));
+        return;
+      }
+      const span = document.createElement('span');
+      span.className = 'transcript-word';
+      span.textContent = token;
+      span.dataset.index = i;
+      span.addEventListener('click', (e) => this._handleWordClick(container, span, i, e));
+      container.appendChild(span);
+    });
+
+    container.appendChild(quote('close'));
+  }
+
+  _handleWordClick(container, span, tokenIndex, event) {
+    // If edit is already open, ignore
+    if (container.querySelector('.word-edit-wrap')) return;
+
+    if (event.shiftKey && this._selectedRange !== null) {
+      // Shift+click: extend selection to a range
+      const start = Math.min(this._selectedRange, tokenIndex);
+      const end = Math.max(this._selectedRange, tokenIndex);
+      this._selectRange(container, start, end);
+      return;
+    }
+
+    // Single click: mark this as selection anchor and open editor
+    this._selectedRange = tokenIndex;
+    this._startWordEdit(container, [tokenIndex]);
+  }
+
+  _selectRange(container, startIdx, endIdx) {
+    // Clear any prior highlights
+    container.querySelectorAll('.word-selected').forEach(el => el.classList.remove('word-selected'));
+
+    // Collect all word token indices in the range
+    const indices = [];
+    const tokens = this._transcriptTokens;
+    for (let i = startIdx; i <= endIdx; i++) {
+      if (tokens[i] && !/^\s+$/.test(tokens[i])) {
+        indices.push(i);
+        const el = container.querySelector(`[data-index="${i}"]`);
+        if (el) el.classList.add('word-selected');
+      }
+    }
+
+    if (indices.length > 0) {
+      this._startWordEdit(container, indices);
+    }
+  }
+
+  _startWordEdit(container, tokenIndices) {
+    // Don't open two editors at once
+    if (container.querySelector('.word-edit-wrap')) return;
+
+    const tokens = this._transcriptTokens;
+    // Build the original phrase from token indices (including whitespace between)
+    const minIdx = Math.min(...tokenIndices);
+    const maxIdx = Math.max(...tokenIndices);
+    const originalPhrase = tokens.slice(minIdx, maxIdx + 1).join('');
+
+    // Find the first word span in range and replace it with the editor
+    const firstSpan = container.querySelector(`[data-index="${minIdx}"]`);
+    if (!firstSpan) return;
+
+    // Hide all spans in the range (except the first, which we'll replace)
+    for (let i = minIdx + 1; i <= maxIdx; i++) {
+      const el = container.querySelector(`[data-index="${i}"]`);
+      if (el) el.style.display = 'none';
+      // Also hide whitespace text nodes between spans
+    }
+    // Hide intermediate whitespace text nodes
+    let node = firstSpan.nextSibling;
+    const hiddenNodes = [];
+    while (node) {
+      const nextNode = node.nextSibling;
+      if (node.nodeType === Node.ELEMENT_NODE && node.dataset.index !== undefined) {
+        const idx = parseInt(node.dataset.index, 10);
+        if (idx > maxIdx) break;
+        if (idx > minIdx) { node.style.display = 'none'; hiddenNodes.push(node); }
+      } else if (node.nodeType === Node.TEXT_NODE) {
+        // Check if this text node is between our range
+        const prevEl = node.previousSibling;
+        const nextEl = node.nextSibling;
+        if (prevEl && nextEl && prevEl.dataset && nextEl.dataset) {
+          const prevIdx = parseInt(prevEl.dataset.index, 10);
+          const nextIdx = parseInt(nextEl.dataset.index, 10);
+          if (prevIdx >= minIdx && nextIdx <= maxIdx) {
+            const placeholder = document.createComment('ws');
+            node.replaceWith(placeholder);
+            hiddenNodes.push({ text: node, placeholder });
+          }
+        }
+      }
+      node = nextNode;
+    }
+
+    const wrap = document.createElement('span');
+    wrap.className = 'word-edit-wrap';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'word-edit-input';
+    input.value = originalPhrase.trim();
+    input.size = Math.max(originalPhrase.length + 2, 8);
+
+    const fixBtn = document.createElement('button');
+    fixBtn.className = 'word-edit-fix';
+    fixBtn.textContent = 'Fix';
+    fixBtn.title = 'Fix this time only (Enter)';
+
+    const alwaysBtn = document.createElement('button');
+    alwaysBtn.className = 'word-edit-always';
+    alwaysBtn.textContent = 'Always';
+    alwaysBtn.title = 'Always auto-correct this (Shift+Enter)';
+
+    wrap.appendChild(input);
+    wrap.appendChild(fixBtn);
+    wrap.appendChild(alwaysBtn);
+
+    firstSpan.replaceWith(wrap);
+    input.focus();
+    input.select();
+
+    const restoreAll = () => {
+      // Restore hidden nodes
+      for (const item of hiddenNodes) {
+        if (item.placeholder) {
+          item.placeholder.replaceWith(item.text);
+        } else {
+          item.style.display = '';
+        }
+      }
+      // Restore first span
+      const restored = document.createElement('span');
+      restored.className = 'transcript-word';
+      restored.textContent = tokens[minIdx];
+      restored.dataset.index = minIdx;
+      restored.addEventListener('click', (e) => this._handleWordClick(container, restored, minIdx, e));
+      wrap.replaceWith(restored);
+      // Clear selection highlights
+      container.querySelectorAll('.word-selected').forEach(el => el.classList.remove('word-selected'));
+      this._selectedRange = null;
+    };
+
+    const applyFix = (newText, flash) => {
+      const trimmed = newText.trim();
+      if (!trimmed || trimmed === originalPhrase.trim()) {
+        restoreAll();
+        return;
+      }
+
+      // Remove hidden intermediate spans/whitespace from DOM
+      for (const item of hiddenNodes) {
+        if (item.placeholder) item.placeholder.remove();
+        else item.remove();
+      }
+
+      // Replace token range with the corrected text
+      // Clear tokens from minIdx+1..maxIdx, put new text at minIdx
+      for (let i = minIdx + 1; i <= maxIdx; i++) {
+        tokens[i] = '';
+      }
+      tokens[minIdx] = trimmed;
+      this.transcription = tokens.filter(t => t !== '').join('');
+
+      // Update session data
+      if (this._session) {
+        const parsed = this._parseTranscription(this.transcription);
+        this._session.taskName = parsed.taskName;
+        this._session.transcription = this.transcription;
+        const taskEl = document.getElementById("confirmed-task-name");
+        if (taskEl) taskEl.textContent = `Switching to: ${parsed.taskName}`;
+      }
+
+      // Create corrected span
+      const corrected = document.createElement('span');
+      corrected.className = `transcript-word ${flash}`;
+      corrected.textContent = trimmed;
+      corrected.dataset.index = minIdx;
+      corrected.addEventListener('click', (e) => this._handleWordClick(container, corrected, minIdx, e));
+      wrap.replaceWith(corrected);
+
+      container.querySelectorAll('.word-selected').forEach(el => el.classList.remove('word-selected'));
+      this._selectedRange = null;
+
+      setTimeout(() => corrected.classList.remove(flash), 600);
+    };
+
+    const doFix = () => {
+      applyFix(input.value, 'word-fixed');
+    };
+
+    const doAlwaysFix = async () => {
+      const newText = input.value.trim();
+      const oldText = originalPhrase.trim();
+      if (!newText || newText === oldText) { restoreAll(); return; }
+
+      applyFix(input.value, 'word-corrected');
+
+      // Determine match phrase: real word → save with context, non-word → save standalone
+      let matchPhrase = oldText;
+      const words = oldText.split(/\s+/);
+      if (words.length === 1 && this._isLikelyRealWord(oldText)) {
+        // Single real word — add surrounding context to avoid false positives
+        matchPhrase = this._buildContextPhrase(tokens, minIdx, maxIdx);
+        // Also build the replacement with the same context
+        const replacementPhrase = this._buildReplacementPhrase(tokens, minIdx, maxIdx, newText);
+        try {
+          await Promise.all([
+            invoke('add_correction', { matchPhrase: matchPhrase, replacement: replacementPhrase }),
+            invoke('add_vocabulary_term', { term: newText }),
+          ]);
+        } catch (e) { console.warn('[TaskFlow] Failed to save correction:', e); }
+        return;
+      }
+
+      // Non-word or multi-word — save as-is
+      try {
+        await Promise.all([
+          invoke('add_correction', { matchPhrase: oldText, replacement: newText }),
+          invoke('add_vocabulary_term', { term: newText }),
+        ]);
+      } catch (e) { console.warn('[TaskFlow] Failed to save correction:', e); }
+    };
+
+    fixBtn.addEventListener('click', doFix);
+    alwaysBtn.addEventListener('click', doAlwaysFix);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); doAlwaysFix(); }
+      else if (e.key === 'Enter') { e.preventDefault(); doFix(); }
+      else if (e.key === 'Escape') { restoreAll(); }
+    });
+  }
+
+  // Heuristic: is this likely a real English word (vs a transcription artefact)?
+  // Real words: all lowercase, no unusual patterns. Artefacts: mixed case, all-caps with >1 char, etc.
+  _isLikelyRealWord(word) {
+    const clean = word.replace(/[^a-zA-Z]/g, '');
+    if (clean.length === 0) return false;
+    // All lowercase → likely real
+    if (clean === clean.toLowerCase()) return true;
+    // Title case (e.g. "Symphony") → likely real
+    if (clean[0] === clean[0].toUpperCase() && clean.slice(1) === clean.slice(1).toLowerCase()) return true;
+    // Short words (1-2 chars) in any case → likely real (e.g. "I", "PR")
+    if (clean.length <= 2) return false; // short caps like "PR" are jargon, not real words
+    // Mixed case or all-caps with 3+ chars → likely artefact
+    return false;
+  }
+
+  // Build a context phrase: word + 1 word of context on each side
+  _buildContextPhrase(tokens, minIdx, maxIdx) {
+    const wordTokens = [];
+    for (let i = 0; i < tokens.length; i++) {
+      if (!/^\s+$/.test(tokens[i]) && tokens[i] !== '') {
+        wordTokens.push({ text: tokens[i], idx: i });
+      }
+    }
+    // Find position of our target in word list
+    const startPos = wordTokens.findIndex(w => w.idx === minIdx);
+    const endPos = wordTokens.findIndex(w => w.idx === maxIdx);
+    if (startPos === -1) return tokens.slice(minIdx, maxIdx + 1).join('');
+
+    const ctxStart = Math.max(0, startPos - 1);
+    const ctxEnd = Math.min(wordTokens.length - 1, endPos + 1);
+    return wordTokens.slice(ctxStart, ctxEnd + 1).map(w => w.text).join(' ');
+  }
+
+  // Build a replacement phrase with the same context but the corrected word(s)
+  _buildReplacementPhrase(tokens, minIdx, maxIdx, newText) {
+    const wordTokens = [];
+    for (let i = 0; i < tokens.length; i++) {
+      if (!/^\s+$/.test(tokens[i]) && tokens[i] !== '') {
+        wordTokens.push({ text: tokens[i], idx: i });
+      }
+    }
+    const startPos = wordTokens.findIndex(w => w.idx === minIdx);
+    const endPos = wordTokens.findIndex(w => w.idx === maxIdx);
+    if (startPos === -1) return newText;
+
+    const ctxStart = Math.max(0, startPos - 1);
+    const ctxEnd = Math.min(wordTokens.length - 1, endPos + 1);
+    const parts = [];
+    for (let i = ctxStart; i <= ctxEnd; i++) {
+      if (i >= startPos && i <= endPos) {
+        if (i === startPos) parts.push(newText); // only push replacement once
+      } else {
+        parts.push(wordTokens[i].text);
+      }
+    }
+    return parts.join(' ');
   }
 
   _updateExitMicBtn(btnId, isRecording) {
