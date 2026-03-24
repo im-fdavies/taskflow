@@ -114,6 +114,14 @@ class TaskFlowApp {
       this.showDashboard();
     });
 
+    // Clicking the frosted backdrop closes the dashboard
+    const dashboardBackdrop = document.getElementById("dashboard-backdrop");
+    if (dashboardBackdrop) {
+      dashboardBackdrop.addEventListener("click", () => {
+        if (this.currentState === "dashboard") this.close();
+      });
+    }
+
     // Escape key closes the overlay
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -416,6 +424,20 @@ class TaskFlowApp {
     if (this._exitVoiceCapture.isRecording()) await this._exitVoiceCapture.stop().catch(() => {});
     if (this._exitBookmarkVoiceCapture.isRecording()) await this._exitBookmarkVoiceCapture.stop().catch(() => {});
     if (this._dashboardVoiceCapture.isRecording()) await this._dashboardVoiceCapture.stop().catch(() => {});
+
+    const backdrop = document.getElementById("dashboard-backdrop");
+    if (this.currentState === "dashboard") {
+      // Slide panel out, fade backdrop, then hide window after transition
+      const panel = document.getElementById("s-dashboard");
+      if (panel) panel.style.transform = "translateX(100%)";
+      if (backdrop) backdrop.classList.remove("visible");
+      await new Promise(resolve => setTimeout(resolve, 300));
+      if (panel) panel.style.transform = "";
+      if (backdrop) backdrop.style.display = "none";
+    } else {
+      if (backdrop) { backdrop.classList.remove("visible"); backdrop.style.display = "none"; }
+    }
+
     try { await invoke("hide_overlay"); } catch (e) { console.error("[TaskFlow] Failed to hide overlay:", e); }
   }
 
@@ -657,6 +679,14 @@ class TaskFlowApp {
   // ---- Dashboard ----
 
   async showDashboard() {
+    // Show frosted backdrop with opacity transition
+    const backdrop = document.getElementById("dashboard-backdrop");
+    if (backdrop) {
+      backdrop.style.display = "block";
+      backdrop.offsetHeight; // force reflow so transition fires
+      backdrop.classList.add("visible");
+    }
+
     this.show("dashboard");
 
     // Load today's summary
