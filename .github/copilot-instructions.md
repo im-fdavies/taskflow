@@ -56,10 +56,15 @@ invoke('generate_clarification_questions', { taskName, template, transcription }
 invoke('generate_exit_question', { taskName, transcription, mode })  // → string | null
 invoke('read_agent_context')                 // → string | null
 invoke('load_templates')                     // → object[]
+invoke('get_vocabulary')                     // → string[]
+invoke('add_vocabulary_term', { term })      // → string[] (updated list)
+invoke('get_corrections')                    // → { match, replace }[]
+invoke('add_correction', { matchPhrase, replacement })  // → { match, replace }[]
+invoke('check_ollama')                       // → bool (cached after first call)
 ```
 
 ### Backend
-All Tauri commands are in `lib.rs`; `main.rs` is a one-liner. Shared mutable state is `AppState { task: Mutex<TaskState> }` registered via `.manage()`. The global hotkey is registered in `.setup()` and calls `toggle_overlay()`, which shows/hides the window and emits `"overlay-opened"` to the frontend.
+All Tauri commands are in `lib.rs`; `main.rs` is a one-liner. Shared mutable state is `AppState { task: Mutex<TaskState>, ollama_available: Mutex<Option<bool>> }` registered via `.manage()`. `ollama_available` caches the first Ollama reachability check — no re-hit on subsequent switches. The global hotkey is registered in `.setup()` and calls `toggle_overlay()`, which shows/hides the window and emits `"overlay-opened"` to the frontend.
 
 Config is loaded from `~/.taskflow/config.toml` via `load_config()` → `Config { api, project }`. API key also reads from `ANTHROPIC_API_KEY` env var (takes priority).
 
@@ -69,6 +74,11 @@ Claude API model ID: `claude-haiku-4-5-20251001`. All Haiku calls have a 3s time
 YAML files in `templates/` define workflows. `_schema.yaml` is the authoritative format spec. Key rules: 3 phases max, one sentence of guidance each, every signal must have a `condition` (never just a timer), gates only before irreversible actions. `pr-amends.yaml` is the reference implementation.
 
 Templates are loaded at startup via `invoke('load_templates')` and matched client-side against `triggers` phrases using `matchTemplate()`.
+
+### Vocabulary & Corrections
+`~/.taskflow/vocabulary.yaml` — list of domain terms fed to whisper-cli via `--prompt` to bias transcription (comma-separated). Seeded with terms like "PR amends", "Tori", "Symfony", "Copilot", "handover", "unblocking". Editable in-app via settings (future) or directly.
+
+`~/.taskflow/corrections.yaml` — phrase-based post-transcription corrections. Each entry has `match_phrase` + `replace`. Applied automatically after every Whisper result via `apply_corrections()` (longer matches run first to prevent partial collisions). In-app: click any word in the transcription display → "Fix" (one-time) or "Always fix" (persists to file). Shift+click for multi-word selection. Single real words are saved with surrounding context to avoid false positives.
 
 ### Agent Context Bridge
 `invoke('read_agent_context')` reads `.github/handover-notes.md` from the `active_path` set in `~/.taskflow/config.toml`. Skips if the file is older than 8 hours. Extracts "what's next" and "what was done" sections (600 char cap each). Update `[project] active_path` in config when switching projects.
@@ -98,7 +108,7 @@ Templates are loaded at startup via `invoke('load_templates')` and matched clien
 460×480px, transparent, no decorations, always-on-top, starts hidden. `macOSPrivateApi: true` + `withGlobalTauri: true` in `tauri.conf.json`. Dev server is always `localhost:1420`.
 
 ## Development Phases
-P0 (skeleton) and P1 (audio/Whisper) are complete. P2 (intelligence: mode detection, templates, Claude API, Ollama) is complete. P3 (coaching: intelligent exit interview, agent context bridge) is in progress.
+P0 (skeleton) and P1 (audio/Whisper) are complete. P2 (intelligence: mode detection, templates, Claude API, Ollama) is complete. P3 (coaching: intelligent exit interview, agent context bridge, vocabulary/corrections system) is in progress — exit interview and vocabulary/corrections are done; task timer, signal detection, and completion gates remain.
 
 Commented-out deps in `Cargo.toml`: `cpal`/`hound` for P1 audio (not needed — WAV encoding is done in JS). `reqwest`/`tokio` are active for P2. Do not add dependencies outside this roadmap without checking the README.
 
