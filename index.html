@@ -134,6 +134,8 @@
             Copy /completion command
           </button>
           <div class="exit-context-loaded" id="completion-skill-copied" style="display:none;">Copied to clipboard</div>
+          <button class="btn btn-context" id="completion-refresh-btn" onclick="app.refreshCompletionContext()">⟳ Load /completion output</button>
+          <div class="exit-context-loaded" id="completion-context-loaded" style="display:none;">Fields pre-populated from /completion</div>
         </div>
         <div class="footer">
           <button class="btn" onclick="app.skipCompletion()">Skip</button>

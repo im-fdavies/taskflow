@@ -663,8 +663,43 @@ class TaskFlowApp {
     if (copiedEl) copiedEl.style.display = "none";
     if (copyBtn) copyBtn.style.display = "inline-flex";
 
+    // Reset refresh feedback
+    const ctxLoaded = document.getElementById("completion-context-loaded");
+    if (ctxLoaded) ctxLoaded.style.display = "none";
+
     this.show("completion");
     setTimeout(() => { if (outcome) outcome.focus(); }, 200);
+
+    // Try to pre-populate from any existing completion-context.json
+    this._loadCompletionContext();
+  }
+
+  async _loadCompletionContext() {
+    try {
+      const ctx = await invoke("read_completion_context");
+      if (!ctx) return;
+
+      const outcome = document.getElementById("completion-outcome");
+      const prs = document.getElementById("completion-prs");
+      const followups = document.getElementById("completion-followups");
+      const handoff = document.getElementById("completion-handoff");
+
+      if (ctx.outcome && outcome) { outcome.value = ctx.outcome; outcome.classList.add("prefilled"); }
+      if (ctx.prs && prs) { prs.value = ctx.prs; prs.classList.add("prefilled"); }
+      if (ctx.follow_ups && followups) { followups.value = ctx.follow_ups; followups.classList.add("prefilled"); }
+      if (ctx.handoff && handoff) { handoff.value = ctx.handoff; handoff.classList.add("prefilled"); }
+
+      const ctxLoaded = document.getElementById("completion-context-loaded");
+      if (ctxLoaded) ctxLoaded.style.display = "block";
+    } catch (e) {
+      // Silent fail — user can still fill in manually
+    }
+  }
+
+  async refreshCompletionContext() {
+    const ctxLoaded = document.getElementById("completion-context-loaded");
+    if (ctxLoaded) ctxLoaded.style.display = "none";
+    await this._loadCompletionContext();
   }
 
   async submitCompletion() {

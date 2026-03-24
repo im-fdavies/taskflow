@@ -938,6 +938,37 @@ fn extract_handover_summary(content: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Completion context (written by /completion skill, read back into form)
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+struct CompletionContext {
+    outcome: Option<String>,
+    prs: Option<String>,
+    follow_ups: Option<String>,
+    handoff: Option<String>,
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn read_completion_context() -> Option<CompletionContext> {
+    let config = load_config();
+    let project_path = config
+        .project
+        .and_then(|p| p.active_path)
+        .or_else(|| std::env::var("TASKFLOW_PROJECT").ok())?;
+
+    let context_path = std::path::Path::new(&project_path)
+        .join(".github/completion-context.json");
+
+    if !context_path.exists() {
+        return None;
+    }
+
+    let content = std::fs::read_to_string(&context_path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+// ---------------------------------------------------------------------------
 // Ollama local LLM fallback
 // ---------------------------------------------------------------------------
 
@@ -1118,6 +1149,7 @@ pub fn run() {
             generate_clarification_questions,
             generate_exit_question,
             read_agent_context,
+            read_completion_context,
             check_ollama,
             detect_mode_llm,
             get_vocabulary,
