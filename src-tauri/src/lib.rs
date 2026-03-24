@@ -323,6 +323,62 @@ fn append_daily_log(
 }
 
 #[tauri::command(rename_all = "camelCase")]
+fn append_completion_log(
+    task_name: String,
+    outcome: String,
+    pr_links: Option<String>,
+    follow_ups: Option<String>,
+    handoff_notes: Option<String>,
+    duration_minutes: Option<i64>,
+) -> Result<(), String> {
+    use std::fs;
+    use std::io::Write;
+
+    let home = dirs::home_dir().ok_or("Could not find home directory")?;
+    let logs_dir = home.join(".taskflow/logs");
+    fs::create_dir_all(&logs_dir).map_err(|e| format!("Failed to create logs dir: {}", e))?;
+
+    let now = Local::now();
+    let date_str = now.format("%Y-%m-%d").to_string();
+    let time_str = now.format("%H:%M").to_string();
+    let log_path = logs_dir.join(format!("{}.md", date_str));
+
+    let file_exists = log_path.exists();
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .map_err(|e| format!("Failed to open log file: {}", e))?;
+
+    if !file_exists {
+        writeln!(file, "# {}\n", date_str).map_err(|e| e.to_string())?;
+    }
+
+    let duration_str = match duration_minutes {
+        Some(d) if d > 0 => {
+            let h = d / 60;
+            let m = d % 60;
+            if h > 0 { format!("{}h {}m", h, m) } else { format!("{}m", m) }
+        }
+        _ => "\u{2014}".to_string(),
+    };
+
+    let outcome_str = if outcome.is_empty() { "\u{2014}" } else { &outcome };
+    let pr_str = pr_links.as_deref().unwrap_or("\u{2014}");
+    let follow_str = follow_ups.as_deref().unwrap_or("\u{2014}");
+    let handoff_str = handoff_notes.as_deref().unwrap_or("\u{2014}");
+
+    writeln!(file, "## {} \u{2014} COMPLETED: {}", time_str, task_name).map_err(|e| e.to_string())?;
+    writeln!(file, "- **Outcome:** {}", outcome_str).map_err(|e| e.to_string())?;
+    writeln!(file, "- **Duration:** {}", duration_str).map_err(|e| e.to_string())?;
+    writeln!(file, "- **PRs:** {}", pr_str).map_err(|e| e.to_string())?;
+    writeln!(file, "- **Follow-ups:** {}", follow_str).map_err(|e| e.to_string())?;
+    writeln!(file, "- **Handoff:** {}\n", handoff_str).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
 fn hide_overlay(app: AppHandle) {
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = window.hide();
@@ -900,13 +956,14 @@ async fn detect_mode_llm(
 
     let prompt = format!(
         "Classify this context switch description into exactly one mode.\n\n\
+         COMPLETE: The user has finished a task and is logging what they did. They are NOT switching to a new task - they are wrapping up and returning to idle.\n\
          URGENT: The user explicitly says something is urgent, broken, or on fire. They need to act immediately.\n\
          LIGHT: The user has finished their previous task cleanly, or the new task is closely related to what they were doing. No stress, just moving on.\n\
          FULL: The user was interrupted, pulled away, or is switching to something unrelated. They need to decompress from the previous context.\n\n\
          Description: \"{transcription}\"\n\
          Current task: \"{task_str}\"\n\n\
          Reply with ONLY a JSON object: {{\"mode\": 1, \"reason\": \"one short phrase\"}}\n\
-         Where mode is: 1=FULL, 2=LIGHT, 3=URGENT"
+         Where mode is: 1=FULL, 2=LIGHT, 3=URGENT, 4=COMPLETE"
     );
 
     let client = reqwest::Client::builder()
@@ -953,7 +1010,7 @@ async fn detect_mode_llm(
             .and_then(|v| v.as_str())
             .unwrap_or("llm")
             .to_string();
-        if (1..=3).contains(&mode) {
+        if (1..=4).contains(&mode) {
             Some((mode, reason))
         } else {
             None
@@ -1038,6 +1095,7 @@ pub fn run() {
             get_corrections,
             add_correction,
             append_daily_log,
+            append_completion_log,
         ])
         .setup(|app| {
             // Register the global shortcut

@@ -173,6 +173,16 @@ class TaskFlowApp {
       return { mode: 1, confidence: "keyword" };
     }
 
+    // Mode 4: completion — user finished a task, no next task implied
+    const mode4Keywords = [
+      "i just finished", "i've completed", "i've finished",
+      "just completed", "task is done", "wrapped up",
+      "all done with", "finished up",
+    ];
+    if (mode4Keywords.some((k) => lower.includes(k))) {
+      return { mode: 4, confidence: "keyword" };
+    }
+
     // Mode 2: clean switch signals
     const mode2Keywords = [
       "finished", "done with", "completed", "moving on to",
@@ -419,7 +429,7 @@ class TaskFlowApp {
     const tryAgainLink = document.getElementById("try-again-link");
     const urgentProgress = document.getElementById("urgent-progress");
 
-    if (taskEl) taskEl.textContent = `Switching to: ${taskName}`;
+    if (taskEl) taskEl.textContent = mode === 4 ? `Completing: ${taskName}` : `Switching to: ${taskName}`;
     if (transcriptEl) this._renderClickableTranscript(transcriptEl, this.transcription);
 
     // Wire up try-again link
@@ -452,8 +462,8 @@ class TaskFlowApp {
     }
 
     // Update mode badge with final result
-    const modeLabels = { 1: "Full Switch", 2: "Quick Switch", 3: "Urgent" };
-    const modeClasses = { 1: "mode-full", 2: "mode-light", 3: "mode-urgent" };
+    const modeLabels = { 1: "Full Switch", 2: "Quick Switch", 3: "Urgent", 4: "Completion" };
+    const modeClasses = { 1: "mode-full", 2: "mode-light", 3: "mode-urgent", 4: "mode-complete" };
     if (modeBadge) {
       modeBadge.textContent = modeLabels[mode] || "Full Switch";
       modeBadge.className = `mode-badge ${modeClasses[mode] || "mode-full"}`;
