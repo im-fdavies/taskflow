@@ -1,0 +1,69 @@
+/* ---- Buttons ---- */
+
+.btn {
+  font-size: 12px;
+  padding: 7px 16px;
+  border-radius: 8px;
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f1f5f9;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.45), rgba(6, 182, 212, 0.35));
+  border-color: rgba(99, 102, 241, 0.25);
+  color: #f1f5f9;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.6), rgba(6, 182, 212, 0.5));
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn-context {
+  width: 100%;
+  margin: 8px 0 4px;
+  background: rgba(20, 184, 166, 0.08);
+  border: 0.5px solid rgba(20, 184, 166, 0.25);
+  color: rgba(20, 184, 166, 0.7);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  animation: fadeInUp 0.2s ease-out;
+}
+
+.btn-context:hover {
+  background: rgba(20, 184, 166, 0.14);
+  color: rgba(20, 184, 166, 0.95);
+}
+
+.btn-context:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn-sm {
+  padding: 5px 16px;
+  font-size: 12px;
+  align-self: flex-end;
+}

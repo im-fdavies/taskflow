@@ -1,0 +1,150 @@
+/* ---- Microphone + waveform ---- */
+
+.mic-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 0.5px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.mic {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+  flex-shrink: 0;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.mic.idle {
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: none;
+  animation: none;
+}
+
+.wave-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 20px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.wave-bar span {
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(to top, rgba(99, 102, 241, 0.5), rgba(6, 182, 212, 0.7));
+  transition: height 0.1s ease;
+}
+
+/* ---- Mode badges ---- */
+
+.badge-mode1 {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.2);
+  color: rgba(165, 180, 252, 0.8);
+}
+
+.badge-mode2 {
+  background: rgba(6, 182, 212, 0.1);
+  border-color: rgba(6, 182, 212, 0.2);
+  color: rgba(103, 232, 249, 0.8);
+}
+
+.badge-mode3 {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: rgba(252, 165, 165, 0.8);
+}
+
+/* ---- Confirmation sub-state ---- */
+
+.confirmed-header {
+  margin-bottom: 12px;
+}
+
+.mode-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.mode-badge.mode-full {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.25);
+  color: rgba(165, 180, 252, 0.9);
+}
+
+.mode-badge.mode-light {
+  background: rgba(6, 182, 212, 0.12);
+  border-color: rgba(6, 182, 212, 0.25);
+  color: rgba(103, 232, 249, 0.9);
+}
+
+.mode-badge.mode-urgent {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: rgba(252, 165, 165, 0.9);
+}
+
+.mode-badge.mode-complete {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #6ee7b7;
+}
+
+.mode-badge.mode-detecting {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.confirmed-transcript {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+  line-height: 1.5;
+  margin-bottom: 6px;
+  font-style: italic;
+}
+
+.try-again-link {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.3);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.try-again-link:hover {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ---- Urgent auto-advance progress ---- */
+
+.urgent-progress {
+  height: 3px;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 2px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.urgent-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.6), rgba(239, 68, 68, 0.9));
+  border-radius: 2px;
+  transition: width 1.5s linear;
+}

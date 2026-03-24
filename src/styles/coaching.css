@@ -1,0 +1,21 @@
+/* ---- Signal / coaching boxes ---- */
+
+.sig-box {
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.sig-info {
+  background: rgba(59, 130, 246, 0.1);
+  border: 0.5px solid rgba(59, 130, 246, 0.18);
+  color: rgba(147, 197, 253, 0.85);
+}
+
+.sig-warn {
+  background: rgba(234, 179, 8, 0.08);
+  border: 0.5px solid rgba(234, 179, 8, 0.14);
+  color: rgba(253, 224, 71, 0.8);
+}

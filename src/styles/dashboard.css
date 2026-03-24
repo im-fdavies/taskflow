@@ -1,0 +1,308 @@
+/* ---- Dashboard slide-in panel ---- */
+
+.dashboard-backdrop {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.dashboard-backdrop.visible {
+  opacity: 1;
+}
+
+#s-dashboard {
+  /* Override base .state styles for the slide-in panel */
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 340px;
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+  border: none;
+  border-left: 0.5px solid rgba(255, 255, 255, 0.1);
+  background: rgba(30, 30, 35, 0.55);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: -1px 0 20px rgba(0, 0, 0, 0.2);
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(110%);
+  -webkit-app-region: no-drag;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: none;
+  padding: 0;
+}
+
+#s-dashboard.active {
+  transform: translateX(0);
+}
+
+#s-dashboard .state-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 64px 24px 12px;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
+#s-dashboard .state-body::-webkit-scrollbar { width: 4px; }
+#s-dashboard .state-body::-webkit-scrollbar-track { background: transparent; }
+#s-dashboard .state-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 2px; }
+
+#s-dashboard .footer {
+  padding: 16px 24px 20px;
+  background: rgba(20, 20, 26, 0.35);
+  border-top: 0.5px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  gap: 10px;
+}
+
+.dashboard-section-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 20px 0 10px;
+}
+
+.dashboard-section-label:first-of-type {
+  margin-top: 0;
+}
+
+.dashboard-summary {
+  font-size: 15px;
+  color: rgba(226, 232, 240, 0.75);
+  line-height: 1.55;
+  max-height: none;
+  overflow: visible;
+  display: block;
+}
+
+.dashboard-voice-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dashboard-mic-btn-sm {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.1);
+  border: 0.5px solid rgba(99, 102, 241, 0.28);
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.dashboard-mic-btn-sm:hover {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.dashboard-mic-btn-sm.recording {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.45);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.dashboard-mic-hint {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.35);
+  text-align: center;
+}
+
+.dashboard-voice-status {
+  margin: 0;
+  padding: 8px 16px;
+  background: rgba(20, 184, 166, 0.08);
+  border: 0.5px solid rgba(20, 184, 166, 0.2);
+  border-radius: 10px;
+  font-size: 14px;
+  color: rgba(20, 184, 166, 0.85);
+  text-align: center;
+  max-width: 260px;
+}
+
+.dashboard-todo-added {
+  padding: 12px;
+  margin: 8px 0;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dashboard-todo-edit {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #e2e8f0;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  resize: none;
+  line-height: 1.4;
+}
+
+.dashboard-todo-edit:focus {
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+.dashboard-todo-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-todo-added-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-field-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
+}
+
+.dashboard-pill-group {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.dashboard-pill {
+  padding: 3px 10px;
+  font-size: 12px;
+  border-radius: 12px;
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  font-family: inherit;
+}
+
+.dashboard-pill:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.dashboard-pill.active {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.4);
+  color: rgba(180, 180, 255, 0.9);
+}
+
+.dashboard-todo-list {
+  max-height: none;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
+.dashboard-todo-item {
+  font-size: 15px;
+  color: rgba(226, 232, 240, 0.85);
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  border-bottom: none;
+  line-height: 1.45;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dashboard-todo-item:last-child {
+  margin-bottom: 0;
+}
+
+.dashboard-todo-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-todo-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+
+.dashboard-todo-item:hover .dashboard-todo-actions {
+  opacity: 1;
+}
+
+.dashboard-todo-action-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+  padding: 0;
+}
+
+.dashboard-todo-action-btn.done:hover {
+  background: rgba(20, 184, 166, 0.15);
+  border-color: rgba(20, 184, 166, 0.3);
+  color: rgba(20, 184, 166, 0.9);
+}
+
+.dashboard-todo-action-btn.discard:hover {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: rgba(239, 68, 68, 0.9);
+}
+
+.dashboard-todo-item.confirming-discard {
+  background: rgba(239, 68, 68, 0.08);
+  border: 0.5px solid rgba(239, 68, 68, 0.2);
+}
+
+.dashboard-todo-item.confirming-discard .dashboard-todo-text {
+  color: rgba(239, 68, 68, 0.8);
+  font-size: 13px;
+}
+
+.dashboard-empty {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.3);
+  padding: 10px 0;
+}
+
+.dashboard-done-label {
+  /* inherits .dashboard-section-label */
+}
+
+.dashboard-done-list {
+  /* inherits defaults */
+}
