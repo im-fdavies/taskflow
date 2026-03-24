@@ -28,6 +28,11 @@ html, body {
   padding: 20px;
 }
 
+/* Interactive elements must not inherit the drag region */
+button, textarea, input, select, .exit-mic-btn, .word-token, [contenteditable] {
+  -webkit-app-region: no-drag;
+}
+
 /* ---- State visibility ---- */
 
 .state {
