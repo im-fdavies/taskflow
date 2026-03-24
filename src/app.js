@@ -124,6 +124,21 @@ class TaskFlowApp {
       });
     }
 
+    // Dashboard pill toggle (priority/reminder selectors)
+    document.querySelectorAll('.dashboard-pill-group').forEach(group => {
+      group.addEventListener('click', (e) => {
+        const pill = e.target.closest('.dashboard-pill');
+        if (!pill) return;
+        // Toggle: if already active, deactivate. Otherwise activate and deactivate siblings.
+        if (pill.classList.contains('active')) {
+          pill.classList.remove('active');
+        } else {
+          group.querySelectorAll('.dashboard-pill').forEach(p => p.classList.remove('active'));
+          pill.classList.add('active');
+        }
+      });
+    });
+
     // Escape key closes the overlay
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -154,6 +169,22 @@ class TaskFlowApp {
         }
       }
     });
+
+    // Enable window dragging on state cards (non-dashboard)
+    const tauriWindow = window.__TAURI__.window;
+    if (tauriWindow) {
+      const appWindow = tauriWindow.getCurrentWindow();
+      document.querySelectorAll('.state').forEach(el => {
+        if (el.id === 's-dashboard') return;
+        el.addEventListener('mousedown', (e) => {
+          // Only drag on the card background, not interactive elements
+          const tag = e.target.tagName.toLowerCase();
+          if (['button', 'textarea', 'input', 'select', 'a'].includes(tag)) return;
+          if (e.target.closest('button, textarea, input, select, a, .exit-mic-btn, .word-token, [contenteditable]')) return;
+          appWindow.startDragging();
+        });
+      });
+    }
 
     // Populate waveform bars on load
     this.populateWaveform("waveform");
@@ -453,6 +484,28 @@ class TaskFlowApp {
         ? badgeEl.textContent
         : null;
 
+    // Check for todo intent first - "add X to my todos/list"
+    const todoTask = this._parseTodoIntent(this.transcription, false);
+    if (todoTask) {
+      // Route to dashboard todo flow instead of context switch
+      try {
+        await invoke("append_todo_entry", { taskName: todoTask });
+      } catch (e) {
+        console.error("[TaskFlow] Failed to add todo from voice:", e);
+      }
+      // Show dashboard with the just-added todo
+      await this.showDashboard();
+      // Show the edit/priority panel
+      const status = document.getElementById("dashboard-voice-status");
+      const addedPanel = document.getElementById("dashboard-todo-added");
+      const editInput = document.getElementById("dashboard-todo-edit");
+      if (status) { status.textContent = `✓ Added: "${todoTask}"`; status.style.display = "block"; }
+      if (addedPanel) addedPanel.style.display = "flex";
+      if (editInput) { editInput.value = todoTask; editInput.focus(); editInput.select(); }
+      this._lastAddedTodo = todoTask;
+      return;
+    }
+
     // Run rule-based detection first
     let { mode, confidence } = this.detectMode(this.transcription, currentTask);
     const template = this.matchTemplate(this.transcription);
@@ -720,7 +773,30 @@ class TaskFlowApp {
         for (const todo of todos) {
           const div = document.createElement("div");
           div.className = "dashboard-todo-item";
-          div.textContent = todo;
+
+          const text = document.createElement("span");
+          text.className = "dashboard-todo-text";
+          text.textContent = todo;
+
+          const actions = document.createElement("span");
+          actions.className = "dashboard-todo-actions";
+
+          const doneBtn = document.createElement("button");
+          doneBtn.className = "dashboard-todo-action-btn done";
+          doneBtn.textContent = "✓";
+          doneBtn.title = "Mark done";
+          doneBtn.onclick = () => this._completeTodo(todo);
+
+          const discardBtn = document.createElement("button");
+          discardBtn.className = "dashboard-todo-action-btn discard";
+          discardBtn.textContent = "✕";
+          discardBtn.title = "Discard";
+          discardBtn.onclick = () => this._discardTodo(todo, div);
+
+          actions.appendChild(doneBtn);
+          actions.appendChild(discardBtn);
+          div.appendChild(text);
+          div.appendChild(actions);
           list.appendChild(div);
         }
       }
@@ -729,11 +805,21 @@ class TaskFlowApp {
     }
   }
 
-  _parseTodoIntent(text) {
-    const addMatch = text.match(/add\s+(.+?)\s+to\s+(?:my\s+)?(?:todos?|list|tasks?)/i);
-    if (addMatch) return addMatch[1].trim();
+  _parseTodoIntent(text, fromDashboard = false) {
+    // Try to extract task name from structured phrasing
+    // Match the tail first: "to my to-do list", "to my todos", "to my list", etc.
+    const tailPattern = /\s+to\s+(?:my\s+)?(?:to[- ]?do\s+)?(?:todos?|list|tasks?)\s*\.?$/i;
+    if (/^add\s+/i.test(text) && tailPattern.test(text)) {
+      const task = text.replace(/^add\s+/i, '').replace(tailPattern, '').trim();
+      if (task) return task;
+    }
     const rememberMatch = text.match(/^(?:remember|remind me to?)\s+(.+)/i);
     if (rememberMatch) return rememberMatch[1].trim();
+    // Strip leading filler words if present
+    const stripped = text.replace(/^(?:add|todo|task|I need to|I want to|please)\s+/i, '').trim();
+    // If called from dashboard, the user already expressed intent by tapping
+    // the mic on the todo screen - treat whatever they said as the todo
+    if (fromDashboard && stripped) return stripped;
     return null;
   }
 
@@ -748,14 +834,19 @@ class TaskFlowApp {
       try {
         const text = await this._dashboardVoiceCapture.stop();
         if (text) {
-          const taskName = this._parseTodoIntent(text);
+          const taskName = this._parseTodoIntent(text, true);
           if (taskName) {
             await invoke("append_todo_entry", { taskName });
-            if (status) { status.textContent = `✓ Added: "${taskName}"`; status.style.display = "block"; }
+            if (status) { status.textContent = `✓ Added`; status.style.display = "block"; }
+            // Show editable field + priority/reminder options
+            const addedPanel = document.getElementById("dashboard-todo-added");
+            const editInput = document.getElementById("dashboard-todo-edit");
+            if (addedPanel) addedPanel.style.display = "flex";
+            if (editInput) { editInput.value = taskName; editInput.focus(); editInput.select(); }
+            this._lastAddedTodo = taskName;
             await this._refreshDashboardTodos();
-            setTimeout(() => { if (status) status.style.display = "none"; }, 3000);
           } else {
-            if (status) { status.textContent = `Couldn't parse that — try "add X to my todos"`; status.style.display = "block"; }
+            if (status) { status.textContent = `Couldn't parse that — try again`; status.style.display = "block"; }
             setTimeout(() => { if (status) status.style.display = "none"; }, 4000);
           }
         }
@@ -763,7 +854,7 @@ class TaskFlowApp {
         console.error("[TaskFlow] Dashboard voice failed:", e);
       } finally {
         if (btn) { btn.disabled = false; btn.textContent = '🎤'; }
-        if (hint) hint.style.display = "inline";
+        if (hint) hint.style.display = "";
       }
     } else {
       try {
@@ -775,6 +866,77 @@ class TaskFlowApp {
         console.error("[TaskFlow] Dashboard mic start failed:", e);
       }
     }
+  }
+
+  async _completeTodo(todoText) {
+    try {
+      await invoke("complete_todo_entry", { todoText });
+      await this._refreshDashboardTodos();
+    } catch (e) {
+      console.error("[TaskFlow] Failed to complete todo:", e);
+    }
+  }
+
+  async _discardTodo(todoText, element) {
+    // Show confirmation inline
+    if (element.dataset.confirming) {
+      // Second click - actually discard
+      try {
+        await invoke("discard_todo_entry", { todoText });
+        await this._refreshDashboardTodos();
+      } catch (e) {
+        console.error("[TaskFlow] Failed to discard todo:", e);
+      }
+      return;
+    }
+
+    // First click - show warning
+    element.dataset.confirming = "true";
+    element.classList.add("confirming-discard");
+    const text = element.querySelector(".dashboard-todo-text");
+    const originalText = text.textContent;
+    text.textContent = "Discard this todo?";
+
+    // Reset after 3 seconds if no second click
+    setTimeout(() => {
+      if (element.dataset.confirming) {
+        delete element.dataset.confirming;
+        element.classList.remove("confirming-discard");
+        text.textContent = originalText;
+      }
+    }, 3000);
+  }
+
+  async dismissTodoAdded() {
+    const addedPanel = document.getElementById("dashboard-todo-added");
+    const status = document.getElementById("dashboard-voice-status");
+    const editInput = document.getElementById("dashboard-todo-edit");
+
+    // If the user corrected the text, update the log entry
+    if (editInput && this._lastAddedTodo) {
+      const newText = editInput.value.trim();
+      if (newText && newText !== this._lastAddedTodo) {
+        try {
+          await invoke("update_todo_entry", {
+            oldName: this._lastAddedTodo,
+            newName: newText,
+          });
+          await this._refreshDashboardTodos();
+        } catch (e) {
+          console.error("[TaskFlow] Failed to update todo:", e);
+        }
+      }
+    }
+
+    if (addedPanel) addedPanel.style.display = "none";
+    if (status) status.style.display = "none";
+    if (editInput) editInput.value = "";
+
+    // Reset pill selections
+    document.querySelectorAll('.dashboard-pill.active').forEach(p => p.classList.remove('active'));
+
+    this._lastAddedTodo = null;
+    // TODO: save priority/reminder values to the log entry when wired up
   }
 
   // ---- Protocol: Listening → Completion (Mode 4) ----

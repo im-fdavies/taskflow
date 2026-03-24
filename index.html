@@ -178,13 +178,7 @@
       </div>
 
       <!-- Dashboard backdrop (frosted overlay, click to close) -->
-      <div id="dashboard-backdrop" class="dashboard-backdrop">
-        <div class="dashboard-centre-voice" id="dashboard-centre-voice">
-          <button class="dashboard-mic-btn" id="dashboard-voice-btn" onclick="app.dashboardVoiceTap()">🎤</button>
-          <div class="dashboard-mic-hint" id="dashboard-voice-hint">Tap to add a todo</div>
-          <div class="dashboard-voice-status" id="dashboard-voice-status" style="display:none;"></div>
-        </div>
-      </div>
+      <div id="dashboard-backdrop" class="dashboard-backdrop"></div>
 
       <!-- State: dashboard -->
       <div id="s-dashboard" class="state">
@@ -192,10 +186,42 @@
           <div class="dashboard-section-label">Today's summary</div>
           <div class="dashboard-summary" id="dashboard-summary">—</div>
 
+          <div class="dashboard-section-label">Add a todo</div>
+          <div class="dashboard-voice-row">
+            <button class="dashboard-mic-btn-sm" id="dashboard-voice-btn" onclick="app.dashboardVoiceTap()">🎤</button>
+            <span class="dashboard-mic-hint" id="dashboard-voice-hint">Tap and say what to add</span>
+          </div>
+          <div class="dashboard-voice-status" id="dashboard-voice-status" style="display:none;"></div>
+          <div class="dashboard-todo-added" id="dashboard-todo-added" style="display:none;">
+            <textarea id="dashboard-todo-edit" class="dashboard-todo-edit" placeholder="Edit todo text..." rows="2"></textarea>
+            <div class="dashboard-todo-options">
+              <div class="dashboard-pill-group" id="dashboard-todo-priority">
+                <button class="dashboard-pill" data-value="low">Low</button>
+                <button class="dashboard-pill" data-value="medium">Med</button>
+                <button class="dashboard-pill" data-value="high">High</button>
+                <button class="dashboard-pill" data-value="urgent">Urgent</button>
+              </div>
+              <div class="dashboard-todo-added-row">
+                <span class="dashboard-field-label">Remind</span>
+                <div class="dashboard-pill-group" id="dashboard-todo-reminder">
+                  <button class="dashboard-pill" data-value="30m">30m</button>
+                  <button class="dashboard-pill" data-value="1h">1h</button>
+                  <button class="dashboard-pill" data-value="2h">2h</button>
+                  <button class="dashboard-pill" data-value="eod">EOD</button>
+                  <button class="dashboard-pill" data-value="custom">Custom</button>
+                </div>
+              </div>
+            </div>
+            <button class="btn btn-sm" onclick="app.dismissTodoAdded()">Save</button>
+          </div>
+
           <div class="dashboard-section-label">Outstanding</div>
           <div class="dashboard-todo-list" id="dashboard-todo-list">
             <div class="dashboard-empty">Loading…</div>
           </div>
+
+          <div class="dashboard-section-label dashboard-done-label" id="dashboard-done-label" style="display:none;">Done</div>
+          <div class="dashboard-done-list" id="dashboard-done-list"></div>
         </div>
         <div class="footer">
           <button class="btn" onclick="app.close()">Close</button>

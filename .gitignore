@@ -18,3 +18,5 @@ logs/
 
 # Environment
 .env
+/.copilot/prompts
+/.github/TASKS
