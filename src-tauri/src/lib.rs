@@ -221,6 +221,9 @@ impl Default for TaskState {
 
 pub struct AppState {
     pub task: Mutex<TaskState>,
+    // Cached after the first check; Ollama availability won't change mid-session.
+    // If the user starts Ollama after launching the app, they must restart.
+    pub ollama_available: Mutex<Option<bool>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -791,24 +794,31 @@ fn extract_handover_summary(content: &str) -> String {
 // ---------------------------------------------------------------------------
 
 #[tauri::command(rename_all = "camelCase")]
-async fn check_ollama() -> bool {
+async fn check_ollama(state: tauri::State<'_, AppState>) -> Result<bool, String> {
     use std::time::Duration;
 
-    let client = match reqwest::Client::builder()
+    {
+        let cached = state.ollama_available.lock().unwrap();
+        if let Some(available) = *cached {
+            return Ok(available);
+        }
+    }
+
+    let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(2))
         .build()
-    {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
+        .map_err(|e| e.to_string())?;
 
-    match client.get("http://localhost:11434/api/tags").send().await {
+    let available = match client.get("http://localhost:11434/api/tags").send().await {
         Ok(r) => r.status().is_success(),
         Err(e) => {
             eprintln!("[TaskFlow] Ollama not available: {e}");
             false
         }
-    }
+    };
+
+    *state.ollama_available.lock().unwrap() = Some(available);
+    Ok(available)
 }
 
 #[derive(Serialize)]
@@ -945,6 +955,7 @@ pub fn run() {
         )
         .manage(AppState {
             task: Mutex::new(TaskState::default()),
+            ollama_available: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             get_state,
