@@ -17,6 +17,7 @@ const STATES = [
   "exit",
   "transition",
   "entry",
+  "completion",
   "coaching",
   "gate",
 ];
@@ -504,12 +505,21 @@ class TaskFlowApp {
         this.proceedToExit();
       }, 1500);
     }
+
+    // Mode 4: completion — go straight to completion capture
+    if (mode === 4) {
+      if (continueBtn) continueBtn.textContent = "Log it →";
+      continueBtn.onclick = () => this.showCompletionState();
+    }
   }
 
   proceedToExit() {
     // Clear urgent auto-advance if user clicked manually
     if (this._urgentTimer) { clearTimeout(this._urgentTimer); this._urgentTimer = null; }
-
+    if (this._session.mode === 4) {
+      this.showCompletionState();
+      return;
+    }
     this.showExitState();
   }
 
@@ -624,6 +634,83 @@ class TaskFlowApp {
     if (mode !== 3) {
       this._fetchExitQuestion();
       this._checkAgentContext();
+    }
+  }
+
+  // ---- Protocol: Listening → Completion (Mode 4) ----
+
+  showCompletionState() {
+    const { taskName } = this._session;
+    const promptEl = document.getElementById("completion-prompt");
+    if (promptEl) promptEl.textContent = `Wrapping up: ${taskName}`;
+
+    // Reset fields
+    const outcome = document.getElementById("completion-outcome");
+    const prs = document.getElementById("completion-prs");
+    const followups = document.getElementById("completion-followups");
+    const handoff = document.getElementById("completion-handoff");
+    if (outcome) outcome.value = "";
+    if (prs) prs.value = "";
+    if (followups) followups.value = "";
+    if (handoff) handoff.value = "";
+
+    // Reset skill button
+    const copiedEl = document.getElementById("completion-skill-copied");
+    const copyBtn = document.getElementById("completion-copy-skill-btn");
+    if (copiedEl) copiedEl.style.display = "none";
+    if (copyBtn) copyBtn.style.display = "inline-flex";
+
+    this.show("completion");
+    setTimeout(() => { if (outcome) outcome.focus(); }, 200);
+  }
+
+  async submitCompletion() {
+    const outcome = document.getElementById("completion-outcome");
+    const prs = document.getElementById("completion-prs");
+    const followups = document.getElementById("completion-followups");
+    const handoff = document.getElementById("completion-handoff");
+    const { taskName } = this._session;
+
+    try {
+      const state = await invoke("get_state");
+      let durationMinutes = null;
+      if (state.task_started_at) {
+        const [h, m] = state.task_started_at.split(':').map(Number);
+        const now = new Date();
+        durationMinutes = Math.round((now.getHours() * 60 + now.getMinutes()) - (h * 60 + m));
+        if (durationMinutes < 0) durationMinutes = null;
+      }
+
+      invoke("append_completion_log", {
+        taskName: taskName || "Unknown",
+        outcome: outcome ? outcome.value.trim() : "",
+        prLinks: prs ? prs.value.trim() || null : null,
+        followUps: followups ? followups.value.trim() || null : null,
+        handoffNotes: handoff ? handoff.value.trim() || null : null,
+        durationMinutes: durationMinutes,
+      });
+    } catch (e) {
+      console.error("[TaskFlow] Completion log failed:", e);
+    }
+
+    await invoke("end_task");
+    this.close();
+  }
+
+  async skipCompletion() {
+    await invoke("end_task");
+    this.close();
+  }
+
+  async copyCompletionSkill() {
+    try {
+      await navigator.clipboard.writeText("copilot /completion");
+      const copiedEl = document.getElementById("completion-skill-copied");
+      const copyBtn = document.getElementById("completion-copy-skill-btn");
+      if (copiedEl) copiedEl.style.display = "block";
+      if (copyBtn) copyBtn.style.display = "none";
+    } catch (e) {
+      console.error("[TaskFlow] Clipboard write failed:", e);
     }
   }
 

@@ -103,6 +103,44 @@
         </div>
       </div>
 
+      <!-- State: completion -->
+      <div id="s-completion" class="state">
+        <div class="state-body">
+          <div class="ol-state">Completion</div>
+          <div class="ol-prompt" id="completion-prompt">Wrapping up</div>
+          <div class="ol-sub">Log what you did so future-you (and your team) can pick up the thread.</div>
+
+          <div class="exit-input-row">
+            <label class="input-label">What was the outcome?</label>
+            <textarea id="completion-outcome" class="exit-textarea" placeholder="What happened? What state is it in now?" rows="3"></textarea>
+          </div>
+
+          <div class="exit-input-row">
+            <label class="input-label">PR links</label>
+            <input id="completion-prs" class="exit-input" type="text" placeholder="github.com/... (comma-separated)" />
+          </div>
+
+          <div class="exit-input-row">
+            <label class="input-label">Follow-ups spawned</label>
+            <textarea id="completion-followups" class="exit-textarea" placeholder="Anything that needs doing next?" rows="2"></textarea>
+          </div>
+
+          <div class="exit-input-row">
+            <label class="input-label">Handoff notes</label>
+            <textarea id="completion-handoff" class="exit-textarea" placeholder="What would someone else need to know to pick this up?" rows="2"></textarea>
+          </div>
+
+          <button class="btn btn-context" id="completion-copy-skill-btn" onclick="app.copyCompletionSkill()">
+            Copy /completion command
+          </button>
+          <div class="exit-context-loaded" id="completion-skill-copied" style="display:none;">Copied to clipboard</div>
+        </div>
+        <div class="footer">
+          <button class="btn" onclick="app.skipCompletion()">Skip</button>
+          <button class="btn btn-primary" onclick="app.submitCompletion()">Log completion →</button>
+        </div>
+      </div>
+
       <!-- State: entry -->
       <div id="s-entry" class="state">
         <div class="ol-state" id="entry-label">Entry</div>
