@@ -102,7 +102,7 @@ This walks through the full context switch flow: listening → exit → transiti
 - [ ] Slack webhook morning summary
 
 ### P5: Polish (~8-12h)
-- [ ] Todo overlay mode
+- [ ] Todo overlay mode — voice shortcut "add [task] to my todo" captures a task directly to a todo list (e.g. linear, markdown file, or system reminders) without triggering a full context switch flow
 - [ ] Note overlay mode
 - [ ] Additional templates
 - [ ] System tray + always-running daemon
