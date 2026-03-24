@@ -12,11 +12,26 @@ use tauri::Emitter;
 #[derive(serde::Deserialize, Default)]
 struct Config {
     api: Option<ApiConfig>,
+    project: Option<ProjectConfig>,
 }
 
 #[derive(serde::Deserialize, Default)]
 struct ApiConfig {
     anthropic_key: Option<String>,
+}
+
+#[derive(serde::Deserialize, Default)]
+struct ProjectConfig {
+    active_path: Option<String>,
+}
+
+fn load_config() -> Config {
+    let path = dirs::home_dir()
+        .map(|h| h.join(".taskflow/config.toml"));
+    let content = path
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .unwrap_or_default();
+    toml::from_str(&content).unwrap_or_default()
 }
 
 fn load_api_key() -> Option<String> {
@@ -28,10 +43,159 @@ fn load_api_key() -> Option<String> {
     }
 
     // 2. ~/.taskflow/config.toml
-    let config_path = dirs::home_dir()?.join(".taskflow/config.toml");
-    let content = std::fs::read_to_string(config_path).ok()?;
-    let config: Config = toml::from_str(&content).ok()?;
-    config.api?.anthropic_key
+    load_config().api?.anthropic_key
+}
+
+// ---------------------------------------------------------------------------
+// Vocabulary
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize, Serialize, Default)]
+struct VocabularyFile {
+    #[serde(default)]
+    terms: Vec<String>,
+}
+
+const DEFAULT_VOCABULARY: &[&str] = &[
+    "PR amends",
+    "pull request",
+    "code review",
+    "Tori invocation",
+    "health check bundle",
+    "Symfony",
+    "unit tests",
+    "authentication",
+    "authorisation",
+    "Copilot",
+    "im-agent-skills",
+    "handover",
+    "unblocking",
+];
+
+fn vocabulary_path() -> std::path::PathBuf {
+    dirs::home_dir()
+        .unwrap_or_default()
+        .join(".taskflow/vocabulary.yaml")
+}
+
+fn load_vocabulary() -> Vec<String> {
+    let path = vocabulary_path();
+    if let Ok(content) = std::fs::read_to_string(&path) {
+        if let Ok(file) = serde_yaml::from_str::<VocabularyFile>(&content) {
+            return file.terms;
+        }
+    }
+    // File doesn't exist or is invalid — create with defaults
+    let terms: Vec<String> = DEFAULT_VOCABULARY.iter().map(|s| s.to_string()).collect();
+    let file = VocabularyFile { terms: terms.clone() };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = save_vocabulary_file(&file);
+    terms
+}
+
+fn save_vocabulary_file(file: &VocabularyFile) -> Result<(), String> {
+    let path = vocabulary_path();
+    let header = "# Terms that Whisper should recognise\n# These are fed to whisper.cpp via --prompt to bias transcription\n";
+    let yaml = serde_yaml::to_string(file).map_err(|e| e.to_string())?;
+    std::fs::write(&path, format!("{}{}", header, yaml)).map_err(|e| e.to_string())
+}
+
+fn vocabulary_prompt_string() -> String {
+    load_vocabulary().join(", ")
+}
+
+// ---------------------------------------------------------------------------
+// Corrections (phrase-based)
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+struct CorrectionEntry {
+    #[serde(rename = "match")]
+    match_phrase: String,
+    replace: String,
+}
+
+#[derive(Deserialize, Serialize, Default)]
+struct CorrectionsFile {
+    #[serde(default)]
+    corrections: Vec<CorrectionEntry>,
+}
+
+fn corrections_path() -> std::path::PathBuf {
+    dirs::home_dir()
+        .unwrap_or_default()
+        .join(".taskflow/corrections.yaml")
+}
+
+fn load_corrections() -> Vec<CorrectionEntry> {
+    let path = corrections_path();
+    if let Ok(content) = std::fs::read_to_string(&path) {
+        if let Ok(file) = serde_yaml::from_str::<CorrectionsFile>(&content) {
+            return file.corrections;
+        }
+    }
+    // Create empty corrections file
+    let file = CorrectionsFile { corrections: Vec::new() };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = save_corrections_file(&file);
+    Vec::new()
+}
+
+fn save_corrections_file(file: &CorrectionsFile) -> Result<(), String> {
+    let path = corrections_path();
+    let header = "# Auto-corrections applied after transcription\n\
+                  # Corrections are phrase-based: match a phrase, replace with another\n";
+    let yaml = serde_yaml::to_string(file).map_err(|e| e.to_string())?;
+    std::fs::write(&path, format!("{}{}", header, yaml)).map_err(|e| e.to_string())
+}
+
+fn apply_corrections(text: &str) -> String {
+    let mut entries = load_corrections();
+    if entries.is_empty() {
+        return text.to_string();
+    }
+
+    // Sort by match length descending so longer phrases match first
+    entries.sort_by(|a, b| b.match_phrase.len().cmp(&a.match_phrase.len()));
+
+    let mut result = text.to_string();
+
+    for entry in &entries {
+        let escaped = regex_lite_escape(&entry.match_phrase);
+        // Single-word matches use word boundaries; multi-word use exact phrase match
+        let is_single_word = !entry.match_phrase.contains(' ');
+        let pattern = if is_single_word {
+            format!(r"(?i)\b{}\b", escaped)
+        } else {
+            // For multi-word: match with flexible whitespace between words
+            let parts: Vec<&str> = entry.match_phrase.split_whitespace().collect();
+            let escaped_parts: Vec<String> = parts.iter().map(|p| regex_lite_escape(p)).collect();
+            format!(r"(?i)\b{}\b", escaped_parts.join(r"\s+"))
+        };
+        if let Ok(re) = regex_lite::Regex::new(&pattern) {
+            result = re.replace_all(&result, entry.replace.as_str()).to_string();
+        }
+    }
+
+    result
+}
+
+fn regex_lite_escape(s: &str) -> String {
+    let mut escaped = String::with_capacity(s.len() + 8);
+    for c in s.chars() {
+        match c {
+            '\\' | '.' | '+' | '*' | '?' | '(' | ')' | '|' | '[' | ']' | '{' | '}' | '^' | '$' => {
+                escaped.push('\\');
+                escaped.push(c);
+            }
+            _ => escaped.push(c),
+        }
+    }
+    escaped
 }
 
 // ---------------------------------------------------------------------------
@@ -63,19 +227,19 @@ pub struct AppState {
 // Tauri commands (called from the frontend JS)
 // ---------------------------------------------------------------------------
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 fn get_state(state: tauri::State<'_, AppState>) -> TaskState {
     state.task.lock().unwrap().clone()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 fn set_mode(mode: String, state: tauri::State<'_, AppState>) -> TaskState {
     let mut task = state.task.lock().unwrap();
     task.mode = mode;
     task.clone()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 fn start_task(name: String, state: tauri::State<'_, AppState>) -> TaskState {
     let mut task = state.task.lock().unwrap();
     task.current_task = Some(name);
@@ -84,7 +248,7 @@ fn start_task(name: String, state: tauri::State<'_, AppState>) -> TaskState {
     task.clone()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 fn end_task(state: tauri::State<'_, AppState>) -> TaskState {
     let mut task = state.task.lock().unwrap();
     task.current_task = None;
@@ -93,14 +257,14 @@ fn end_task(state: tauri::State<'_, AppState>) -> TaskState {
     task.clone()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 fn hide_overlay(app: AppHandle) {
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = window.hide();
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 fn transcribe_audio(wav_data: Vec<u8>) -> Result<String, String> {
     use std::fs;
     use std::process::Command;
@@ -114,17 +278,24 @@ fn transcribe_audio(wav_data: Vec<u8>) -> Result<String, String> {
     // Expand home directory for whisper paths
     let home = dirs::home_dir().ok_or("Could not find home directory")?;
     let whisper_bin = home.join("Documents/GitHub/whisper.cpp/build/bin/whisper-cli");
-    let model_path = home.join("Documents/GitHub/whisper.cpp/models/ggml-base.en.bin");
+    let model_path = home.join("Documents/GitHub/whisper.cpp/models/ggml-small.en.bin");
+
+    // Build vocabulary prompt from ~/.taskflow/vocabulary.yaml
+    let prompt = vocabulary_prompt_string();
 
     // Spawn whisper-cli
     let output = Command::new(&whisper_bin)
-        .args([
-            "-m", model_path.to_str().unwrap(),
-            "-f", tmp_path,
-            "--no-timestamps",
-        ])
-        .output()
-        .map_err(|e| format!("Failed to spawn whisper-cli: {}", e))?;
+    .args([
+        "-m", model_path.to_str().unwrap(),
+        "-f", tmp_path,
+        "--no-timestamps",
+        "--beam-size", "8",
+        "--best-of", "5",
+        "--language", "en",
+        "--prompt", &prompt,
+    ])
+    .output()
+    .map_err(|e| format!("Failed to spawn whisper-cli: {}", e))?;
 
     // Clean up temp file (best effort)
     let _ = fs::remove_file(tmp_path);
@@ -147,25 +318,91 @@ fn transcribe_audio(wav_data: Vec<u8>) -> Result<String, String> {
         return Err("No transcription returned".to_string());
     }
 
-    Ok(text)
+    // Apply corrections before returning
+    Ok(apply_corrections(&text))
 }
 
-#[tauri::command]
+// ---------------------------------------------------------------------------
+// Vocabulary & Corrections — Tauri commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command(rename_all = "camelCase")]
+fn get_vocabulary() -> Vec<String> {
+    load_vocabulary()
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn add_vocabulary_term(term: String) -> Result<Vec<String>, String> {
+    let mut terms = load_vocabulary();
+    let trimmed = term.trim().to_string();
+    if trimmed.is_empty() {
+        return Err("Term cannot be empty".to_string());
+    }
+    // Avoid duplicates (case-insensitive)
+    if !terms.iter().any(|t| t.eq_ignore_ascii_case(&trimmed)) {
+        terms.push(trimmed);
+        let file = VocabularyFile { terms: terms.clone() };
+        save_vocabulary_file(&file)?;
+    }
+    Ok(terms)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn get_corrections() -> Vec<serde_json::Value> {
+    load_corrections()
+        .into_iter()
+        .map(|e| serde_json::json!({ "match": e.match_phrase, "replace": e.replace }))
+        .collect()
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn add_correction(match_phrase: String, replacement: String) -> Result<Vec<serde_json::Value>, String> {
+    let match_phrase = match_phrase.trim().to_string();
+    let replacement = replacement.trim().to_string();
+    if match_phrase.is_empty() || replacement.is_empty() {
+        return Err("Both match_phrase and replacement must be non-empty".to_string());
+    }
+    let mut entries = load_corrections();
+    // Remove existing entry for same match phrase (case-insensitive) to avoid duplicates
+    entries.retain(|e| !e.match_phrase.eq_ignore_ascii_case(&match_phrase));
+    entries.push(CorrectionEntry { match_phrase, replace: replacement });
+    let file = CorrectionsFile { corrections: entries.clone() };
+    save_corrections_file(&file)?;
+    Ok(entries
+        .into_iter()
+        .map(|e| serde_json::json!({ "match": e.match_phrase, "replace": e.replace }))
+        .collect())
+}
+
+// ---------------------------------------------------------------------------
+// Templates — path resolution
+// ---------------------------------------------------------------------------
+
+// Resolves the templates/ directory.
+// In dev mode CARGO_MANIFEST_DIR is src-tauri/ (compile-time), so
+// one level up lands at the project root where templates/ lives.
+// Falls back to cwd-relative paths in case of unusual layouts.
+fn resolve_templates_dir() -> Option<std::path::PathBuf> {
+    let manifest_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../templates");
+    if manifest_path.exists() {
+        return Some(manifest_path);
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        let p = cwd.join("templates");
+        if p.exists() { return Some(p); }
+        let p = cwd.join("../templates");
+        if p.exists() { return Some(p); }
+    }
+    None
+}
+
+#[tauri::command(rename_all = "camelCase")]
 fn load_templates() -> Result<Vec<serde_json::Value>, String> {
     use std::fs;
 
-    // In dev (npx tauri dev), cwd is the project root
-    // where templates/ lives alongside src/, src-tauri/, etc.
-    let cwd = std::env::current_dir()
-        .map_err(|e| format!("Cannot get cwd: {}", e))?;
-    let templates_dir = cwd.join("templates");
-
-    if !templates_dir.exists() {
-        return Err(format!(
-            "templates/ directory not found at {}",
-            templates_dir.display()
-        ));
-    }
+    let templates_dir = resolve_templates_dir()
+        .ok_or_else(|| "templates/ directory not found".to_string())?;
 
     let mut templates = Vec::new();
     let entries = fs::read_dir(&templates_dir)
@@ -197,15 +434,12 @@ fn load_templates() -> Result<Vec<serde_json::Value>, String> {
     Ok(templates)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 fn get_template(name: String) -> Result<serde_json::Value, String> {
     use std::fs;
 
-    let cwd = std::env::current_dir()
-        .map_err(|e| format!("Cannot get cwd: {}", e))?;
-    let templates_dir = cwd.join("templates");
-
-    // Try matching by id field or by filename
+    let templates_dir = resolve_templates_dir()
+        .ok_or_else(|| "templates/ directory not found".to_string())?;
     let entries = fs::read_dir(&templates_dir)
         .map_err(|e| format!("Cannot read templates dir: {}", e))?;
 
@@ -242,7 +476,7 @@ fn get_template(name: String) -> Result<serde_json::Value, String> {
     Err(format!("Template '{}' not found", name))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 async fn generate_clarification_questions(
     transcription: String,
     template_name: String,
@@ -336,10 +570,227 @@ Example bad questions (never ask these):\n\
 }
 
 // ---------------------------------------------------------------------------
+// Exit interview — single follow-up question
+// ---------------------------------------------------------------------------
+
+#[tauri::command(rename_all = "camelCase")]
+async fn generate_exit_question(
+    transcription: String,
+    exit_context: String,
+    task_name: String,
+    template_name: String,
+) -> Result<Option<String>, String> {
+    use std::time::Duration;
+
+    let api_key = match load_api_key() {
+        Some(k) => k,
+        None => return Ok(None),
+    };
+
+    let system_prompt = "You are a context-switch assistant. The user is closing out a task and handing off to their future self.\n\n\
+You know what they said, what they extracted as their current task state, and what they are switching to.\n\n\
+Generate exactly ONE short follow-up question that would help them leave a better exit note.\n\n\
+The question MUST meet all three criteria:\n\
+1. The answer is NOT already present in what they said or their exit context\n\
+2. The answer would meaningfully change what they do when they come back (e.g. \"committed\" vs \"mid-change\" changes re-entry entirely)\n\
+3. It is specific to this task — not generic productivity advice\n\n\
+If no such question exists, return null.\n\n\
+Return ONLY a JSON string (the question) or JSON null. No preamble, no markdown, no explanation.\n\n\
+Examples of GOOD questions:\n\
+- \"Is that committed and pushed, or still in your working tree?\"\n\
+- \"Is the failing test a new one you wrote, or an existing one that broke?\"\n\
+- \"Did you leave a TODO comment where you stopped, or is the stopping point implicit?\"\n\n\
+Examples of BAD questions (never ask these):\n\
+- \"What were you working on?\" (they already said)\n\
+- \"How are you feeling?\" (not actionable)\n\
+- \"Have you saved your work?\" (generic, not task-specific)";
+
+    let user_message = format!(
+        "Full transcription: {transcription}\n\
+         Extracted exit context: {exit_context}\n\
+         Task name: {task_name}\n\
+         Template: {template_name}\n\n\
+         Return a single JSON string question, or null."
+    );
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
+
+    let body = serde_json::json!({
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 120,
+        "system": system_prompt,
+        "messages": [
+            { "role": "user", "content": user_message }
+        ]
+    });
+
+    let response = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", &api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("API request failed: {e}"))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!("API error {status}: {text}"));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse API response: {e}"))?;
+
+    let text = json
+        .get("content")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("text"))
+        .and_then(|t| t.as_str())
+        .ok_or_else(|| "Unexpected API response shape".to_string())?;
+
+    let trimmed = text.trim();
+
+    // LLM returned null — no useful question
+    if trimmed == "null" {
+        return Ok(None);
+    }
+
+    // Parse the question string
+    let question: String = serde_json::from_str(trimmed)
+        .map_err(|e| format!("Failed to parse question JSON: {e}. Raw: {trimmed}"))?;
+
+    if question.trim().is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(question))
+}
+
+// ---------------------------------------------------------------------------
+// Agent context bridge — reads handover notes from active project
+// ---------------------------------------------------------------------------
+
+#[tauri::command(rename_all = "camelCase")]
+fn read_agent_context() -> Option<String> {
+    use std::time::{Duration, SystemTime};
+
+    // Resolve active project path: config > env var
+    let config = load_config();
+    let project_path = config
+        .project
+        .and_then(|p| p.active_path)
+        .or_else(|| std::env::var("TASKFLOW_PROJECT").ok())?;
+
+    let notes_path = std::path::Path::new(&project_path)
+        .join(".github/handover-notes.md");
+
+    if !notes_path.exists() {
+        return None;
+    }
+
+    // Only use notes modified within the last 8 hours
+    let meta = std::fs::metadata(&notes_path).ok()?;
+    let modified = meta.modified().ok()?;
+    let age = SystemTime::now().duration_since(modified).unwrap_or(Duration::MAX);
+    if age > Duration::from_secs(8 * 3600) {
+        eprintln!("[TaskFlow] Handover notes exist but are older than 8h — skipping");
+        return None;
+    }
+
+    let content = std::fs::read_to_string(&notes_path).ok()?;
+
+    // Extract the most useful sections from the handover notes.
+    // Strategy: find "What was done this session" and "What's next" blocks,
+    // which are the standard headings used by the /handover skill.
+    // Fall back to the full content trimmed to 1500 chars if headings not found.
+    let extracted = extract_handover_summary(&content);
+
+    if extracted.is_empty() {
+        return None;
+    }
+
+    Some(extracted)
+}
+
+fn extract_handover_summary(content: &str) -> String {
+    // Find key sections by heading. We look for lines starting with "## "
+    // and extract the content of "What was done" and "What's next" sections.
+    let mut sections: Vec<(usize, &str)> = Vec::new();
+    for (i, line) in content.lines().enumerate() {
+        if line.starts_with("## ") {
+            sections.push((i, line));
+        }
+    }
+
+    let lines: Vec<&str> = content.lines().collect();
+    let total = lines.len();
+    let mut result = String::new();
+
+    // Section names to extract, in priority order.
+    // "What's next" is most valuable for exit context (what's remaining).
+    // "What was done" gives the done/in-progress picture.
+    // Each section is capped at 600 chars to keep exit notes readable.
+    let priority_order = ["what's next", "whats next", "what was done", "current state"];
+
+    // Collect matching sections in priority order
+    let mut collected: Vec<(usize, String)> = Vec::new();
+    for (idx, (line_num, heading)) in sections.iter().enumerate() {
+        let h_lower = heading.to_lowercase();
+        let priority = priority_order.iter().position(|w| h_lower.contains(w));
+        if let Some(p) = priority {
+            let next_section_line = sections
+                .get(idx + 1)
+                .map(|(ln, _)| *ln)
+                .unwrap_or(total);
+            let section_lines: Vec<&str> = lines[*line_num..next_section_line]
+                .iter()
+                .copied()
+                .collect();
+            let text = section_lines.join("\n").trim().to_string();
+            // Cap each section at 600 chars
+            let capped = if text.len() > 600 {
+                format!("{}…", &text[..600])
+            } else {
+                text
+            };
+            collected.push((p, capped));
+        }
+    }
+
+    // Sort by priority (lower index = higher priority)
+    collected.sort_by_key(|(p, _)| *p);
+
+    for (_, text) in collected {
+        if !result.is_empty() {
+            result.push_str("\n\n");
+        }
+        result.push_str(&text);
+    }
+
+    // If no known headings found, return the whole file trimmed to 800 chars
+    if result.is_empty() {
+        let trimmed = content.trim();
+        if trimmed.len() > 800 {
+            return format!("{}…", &trimmed[..800]);
+        }
+        return trimmed.to_string();
+    }
+
+    result
+}
+
+// ---------------------------------------------------------------------------
 // Ollama local LLM fallback
 // ---------------------------------------------------------------------------
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 async fn check_ollama() -> bool {
     use std::time::Duration;
 
@@ -366,7 +817,7 @@ struct LlmModeResult {
     reason: String,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 async fn detect_mode_llm(
     transcription: String,
     current_task: Option<String>,
@@ -505,8 +956,14 @@ pub fn run() {
             load_templates,
             get_template,
             generate_clarification_questions,
+            generate_exit_question,
+            read_agent_context,
             check_ollama,
             detect_mode_llm,
+            get_vocabulary,
+            add_vocabulary_term,
+            get_corrections,
+            add_correction,
         ])
         .setup(|app| {
             // Register the global shortcut
@@ -520,7 +977,6 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 if let Some(window) = app.get_webview_window("overlay") {
-                    use tauri::Emitter;
                     // The window is transparent — the frosted glass effect
                     // comes from the CSS backdrop-filter in the frontend.
                     // For native vibrancy, uncomment when you add
