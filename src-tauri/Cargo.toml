@@ -19,6 +19,7 @@ serde_json = "1"
 chrono = "0.4"
 dirs = "5"
 serde_yaml = "0.9"              # P2: Template parsing
+regex-lite = "0.1"              # P3: Whole-word correction matching
 
 # Uncomment these as you reach each milestone:
 # cpal = "0.15"                    # P1: Audio capture

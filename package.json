@@ -5,7 +5,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:dev": "npx tauri dev",
+    "tauri:build": "npx tauri build",
+    "ollama:pull": "ollama pull llama3.1:8b",
+    "ollama:serve": "ollama serve",
+    "start": "ollama serve & npx tauri dev",
+    "rust:check": "cargo build --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {},
   "devDependencies": {

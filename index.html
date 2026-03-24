@@ -47,30 +47,41 @@
 
       <!-- State: exit -->
       <div id="s-exit" class="state">
-        <div class="ol-state" id="exit-label">Exit phase</div>
-        <div class="ol-prompt" id="exit-prompt">Where are you leaving off?</div>
-        <div class="ol-sub" id="exit-subtitle">Document the state of your work before switching.</div>
-        <div class="exit-input-row">
-          <textarea
-            id="exit-notes"
-            class="exit-textarea"
-            placeholder="What were you just doing? What state is it in?"
-            rows="3"
-          ></textarea>
-          <button class="exit-mic-btn" id="exit-mic-btn" title="Record voice note">🎤</button>
+        <div class="state-body">
+          <div class="ol-state" id="exit-label">Exit phase</div>
+          <div class="ol-prompt" id="exit-prompt">Where are you leaving off?</div>
+          <div class="ol-sub" id="exit-subtitle">Document the state of your work before switching.</div>
+          <div class="exit-input-row">
+            <textarea
+              id="exit-notes"
+              class="exit-textarea"
+              placeholder="What were you just doing? What state is it in?"
+              rows="3"
+            ></textarea>
+            <button class="exit-mic-btn" id="exit-mic-btn" title="Record voice note">🎤</button>
+          </div>
+          <div class="prefilled-hint" id="exit-prefilled-hint" style="display:none;"></div>
+          <div class="ol-sub" id="exit-bookmark-label" style="display:none">What's the first thing you'd pick up if you came back to this?</div>
+          <div class="exit-input-row" id="exit-bookmark-row" style="display:none">
+            <textarea
+              id="exit-bookmark"
+              class="exit-textarea"
+              placeholder="First thing to pick up…"
+              rows="2"
+            ></textarea>
+            <button class="exit-mic-btn" id="exit-bookmark-mic-btn" title="Record voice note">🎤</button>
+          </div>
+          <div class="prefilled-hint" id="exit-bookmark-prefilled-hint" style="display:none;"></div>
+          <div class="exit-question-nudge" id="exit-question-nudge" style="display:none;">
+            <span class="exit-question-thinking" id="exit-question-thinking" style="display:none;">Thinking…</span>
+            <div class="exit-question-body" id="exit-question-body" style="display:none;">
+              <span class="exit-question-icon">💭</span>
+              <span class="exit-question-text" id="exit-question-text"></span>
+            </div>
+          </div>
+          <button class="btn btn-context" id="exit-context-btn" style="display:none;" onclick="app.loadAgentContext()">⬇ Load agent context</button>
+          <div class="exit-context-loaded" id="exit-context-loaded" style="display:none;">Agent context loaded into notes</div>
         </div>
-        <div class="prefilled-hint" id="exit-prefilled-hint" style="display:none;"></div>
-        <div class="ol-sub" id="exit-bookmark-label" style="display:none">What's the first thing you'd pick up if you came back to this?</div>
-        <div class="exit-input-row" id="exit-bookmark-row" style="display:none">
-          <textarea
-            id="exit-bookmark"
-            class="exit-textarea"
-            placeholder="First thing to pick up…"
-            rows="2"
-          ></textarea>
-          <button class="exit-mic-btn" id="exit-bookmark-mic-btn" title="Record voice note">🎤</button>
-        </div>
-        <div class="prefilled-hint" id="exit-bookmark-prefilled-hint" style="display:none;"></div>
         <div class="footer">
           <button class="btn" id="exit-skip-btn" style="display:none" onclick="app.skipExit()">Skip</button>
           <button class="btn btn-primary" id="exit-submit-btn" onclick="app.submitExit()">Continue →</button>
@@ -82,7 +93,7 @@
         <div class="ol-state">Transition</div>
         <div class="ol-prompt" id="transition-prompt">Switching context.</div>
         <div class="bookmark" id="transition-bookmark">
-          <div class="bookmark-label">Exit capture</div>
+          <div class="bookmark-label">Putting on hold:</div>
           <div class="bookmark-text" id="bookmark-content">—</div>
         </div>
         <div id="transition-auto-msg" class="ol-sub" style="display:none">Context boundary set.</div>
