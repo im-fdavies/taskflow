@@ -281,7 +281,7 @@ fn transcribe_audio(wav_data: Vec<u8>) -> Result<String, String> {
     // Expand home directory for whisper paths
     let home = dirs::home_dir().ok_or("Could not find home directory")?;
     let whisper_bin = home.join("Documents/GitHub/whisper.cpp/build/bin/whisper-cli");
-    let model_path = home.join("Documents/GitHub/whisper.cpp/models/ggml-small.en.bin");
+    let model_path = home.join("Documents/GitHub/whisper.cpp/models/ggml-base.en.bin");
 
     // Build vocabulary prompt from ~/.taskflow/vocabulary.yaml
     let prompt = vocabulary_prompt_string();
