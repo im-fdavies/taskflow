@@ -427,13 +427,14 @@ class TaskFlowApp {
 
     const backdrop = document.getElementById("dashboard-backdrop");
     if (this.currentState === "dashboard") {
-      // Slide panel out, fade backdrop, then hide window after transition
+      // Slide panel out, fade backdrop, then restore window and hide
       const panel = document.getElementById("s-dashboard");
       if (panel) panel.style.transform = "translateX(100%)";
       if (backdrop) backdrop.classList.remove("visible");
       await new Promise(resolve => setTimeout(resolve, 300));
       if (panel) panel.style.transform = "";
       if (backdrop) backdrop.style.display = "none";
+      await invoke("collapse_from_dashboard").catch(() => {});
     } else {
       if (backdrop) { backdrop.classList.remove("visible"); backdrop.style.display = "none"; }
     }
@@ -679,6 +680,9 @@ class TaskFlowApp {
   // ---- Dashboard ----
 
   async showDashboard() {
+    // Expand window to full screen height before showing panel
+    await invoke("expand_for_dashboard").catch(() => {});
+
     // Show frosted backdrop with opacity transition
     const backdrop = document.getElementById("dashboard-backdrop");
     if (backdrop) {
