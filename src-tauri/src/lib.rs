@@ -260,17 +260,47 @@ fn end_task(state: tauri::State<'_, AppState>) -> TaskState {
     task.clone()
 }
 
+// Returns the byte offset of an H2 heading with the given text, used for section-aware insertion.
+fn find_section_byte_offset(content: &str, section_name: &str) -> Option<usize> {
+    use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+
+    let mut in_h2 = false;
+    let mut heading_start: usize = 0;
+
+    for (event, range) in Parser::new_ext(content, Options::empty()).into_offset_iter() {
+        match event {
+            Event::Start(Tag::Heading { level: HeadingLevel::H2, .. }) => {
+                in_h2 = true;
+                heading_start = range.start;
+            }
+            Event::Text(ref text) if in_h2 => {
+                if text.trim() == section_name {
+                    return Some(heading_start);
+                }
+            }
+            Event::End(TagEnd::Heading(_)) => {
+                in_h2 = false;
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn daily_log_skeleton(date_str: &str) -> String {
+    format!("# {} - Daily Log\n\n## Summary\n\n\n## Todos\n\n\n## Completed Work\n\n", date_str)
+}
+
 #[tauri::command(rename_all = "camelCase")]
 fn append_daily_log(
     task_name: String,
-    template_name: Option<String>,
+    task_type: Option<String>,
     exit_capture: String,
     bookmark: Option<String>,
     mode: u8,
     duration_minutes: Option<i64>,
 ) -> Result<(), String> {
     use std::fs;
-    use std::io::Write;
 
     let home = dirs::home_dir().ok_or("Could not find home directory")?;
     let logs_dir = home.join(".taskflow/logs");
@@ -281,16 +311,11 @@ fn append_daily_log(
     let time_str = now.format("%H:%M").to_string();
     let log_path = logs_dir.join(format!("{}.md", date_str));
 
-    let file_exists = log_path.exists();
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-        .map_err(|e| format!("Failed to open log file: {}", e))?;
-
-    if !file_exists {
-        writeln!(file, "# {}\n", date_str).map_err(|e| e.to_string())?;
-    }
+    let content = if log_path.exists() {
+        fs::read_to_string(&log_path).map_err(|e| format!("Failed to read log file: {}", e))?
+    } else {
+        daily_log_skeleton(&date_str)
+    };
 
     let mode_label = match mode {
         1 => "Full",
@@ -308,16 +333,22 @@ fn append_daily_log(
         _ => "\u{2014}".to_string(),
     };
 
-    let template_str = template_name.as_deref().unwrap_or("None");
+    let task_type_str = task_type.as_deref().unwrap_or("None");
     let bookmark_str = bookmark.as_deref().unwrap_or("\u{2014}");
     let exit_str = if exit_capture.is_empty() { "\u{2014}" } else { &exit_capture };
 
-    writeln!(file, "## {} \u{2014} {}", time_str, task_name).map_err(|e| e.to_string())?;
-    writeln!(file, "- **Mode:** {}", mode_label).map_err(|e| e.to_string())?;
-    writeln!(file, "- **Template:** {}", template_str).map_err(|e| e.to_string())?;
-    writeln!(file, "- **Duration:** {}", duration_str).map_err(|e| e.to_string())?;
-    writeln!(file, "- **Exit notes:** {}", exit_str).map_err(|e| e.to_string())?;
-    writeln!(file, "- **Bookmark:** {}\n", bookmark_str).map_err(|e| e.to_string())?;
+    let entry = format!(
+        "### {} - {}\n- **Switch:** {}\n- **Task Type:** {}\n- **Duration:** {}\n- **Exit notes:** {}\n- **Bookmark:** {}\n\n",
+        time_str, task_name, mode_label, task_type_str, duration_str, exit_str, bookmark_str
+    );
+
+    // Insert before "## Completed Work"; fall back to append if section not found.
+    let new_content = match find_section_byte_offset(&content, "Completed Work") {
+        Some(pos) => format!("{}{}{}", &content[..pos], entry, &content[pos..]),
+        None => format!("{}{}", content, entry),
+    };
+
+    fs::write(&log_path, new_content).map_err(|e| format!("Failed to write log file: {}", e))?;
 
     Ok(())
 }
@@ -332,7 +363,6 @@ fn append_completion_log(
     duration_minutes: Option<i64>,
 ) -> Result<(), String> {
     use std::fs;
-    use std::io::Write;
 
     let home = dirs::home_dir().ok_or("Could not find home directory")?;
     let logs_dir = home.join(".taskflow/logs");
@@ -343,16 +373,11 @@ fn append_completion_log(
     let time_str = now.format("%H:%M").to_string();
     let log_path = logs_dir.join(format!("{}.md", date_str));
 
-    let file_exists = log_path.exists();
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-        .map_err(|e| format!("Failed to open log file: {}", e))?;
-
-    if !file_exists {
-        writeln!(file, "# {}\n", date_str).map_err(|e| e.to_string())?;
-    }
+    let mut content = if log_path.exists() {
+        fs::read_to_string(&log_path).map_err(|e| format!("Failed to read log file: {}", e))?
+    } else {
+        daily_log_skeleton(&date_str)
+    };
 
     let duration_str = match duration_minutes {
         Some(d) if d > 0 => {
@@ -368,12 +393,17 @@ fn append_completion_log(
     let follow_str = follow_ups.as_deref().unwrap_or("\u{2014}");
     let handoff_str = handoff_notes.as_deref().unwrap_or("\u{2014}");
 
-    writeln!(file, "## {} \u{2014} COMPLETED: {}", time_str, task_name).map_err(|e| e.to_string())?;
-    writeln!(file, "- **Outcome:** {}", outcome_str).map_err(|e| e.to_string())?;
-    writeln!(file, "- **Duration:** {}", duration_str).map_err(|e| e.to_string())?;
-    writeln!(file, "- **PRs:** {}", pr_str).map_err(|e| e.to_string())?;
-    writeln!(file, "- **Follow-ups:** {}", follow_str).map_err(|e| e.to_string())?;
-    writeln!(file, "- **Handoff:** {}\n", handoff_str).map_err(|e| e.to_string())?;
+    let entry = format!(
+        "### {} - COMPLETED: {}\n- **Outcome:** {}\n- **Duration:** {}\n- **PRs:** {}\n- **Follow-ups:** {}\n- **Handoff:** {}\n\n",
+        time_str, task_name, outcome_str, duration_str, pr_str, follow_str, handoff_str
+    );
+
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    content.push_str(&entry);
+
+    fs::write(&log_path, content).map_err(|e| format!("Failed to write log file: {}", e))?;
 
     Ok(())
 }

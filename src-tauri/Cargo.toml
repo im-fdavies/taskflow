@@ -20,6 +20,8 @@ chrono = "0.4"
 dirs = "5"
 serde_yaml = "0.9"              # P2: Template parsing
 regex-lite = "0.1"              # P3: Whole-word correction matching
+pulldown-cmark = "0.11"         # P4: Markdown parsing for section-aware log insertion
+pulldown-cmark-to-cmark = "10"  # P4: Markdown roundtripping (used by summary agent)
 
 # Uncomment these as you reach each milestone:
 # cpal = "0.15"                    # P1: Audio capture

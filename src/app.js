@@ -859,7 +859,7 @@ class TaskFlowApp {
       }
       invoke("append_daily_log", {
         taskName: taskName || "Unknown",
-        templateName: this._session.template?.name || null,
+        taskType: this._session.template?.name || null,
         exitCapture: exitCapture || "",
         bookmark: this._session.extractedBookmark || null,
         mode: mode,
