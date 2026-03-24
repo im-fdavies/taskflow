@@ -76,6 +76,11 @@ Follow the **On Completion** instructions in the prompt exactly. These will alwa
 
 Be honest with the confidence score. A 10 means "I would bet my job this is correct." An 8 means "it works in the cases I tested but I have a nagging doubt." Err on the side of caution.
 
+4. Commit and push all changed files for this task in a single commit:
+   - Message format: `<type>(<task-slug>): <what was done>` — keep it short, one line only
+   - Include only information needed to identify the task and outcome (e.g. `chore(vocab-corrections): verify complete` or `fix(exit-textarea): defer notes.value past show()`)
+   - No co-author trailers, no body, no bullet lists in the message
+
 # Constraints
 
 - **Read before you write.** Never modify a file you haven't read first in this session.
