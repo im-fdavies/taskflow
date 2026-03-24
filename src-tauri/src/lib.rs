@@ -261,6 +261,68 @@ fn end_task(state: tauri::State<'_, AppState>) -> TaskState {
 }
 
 #[tauri::command(rename_all = "camelCase")]
+fn append_daily_log(
+    task_name: String,
+    template_name: Option<String>,
+    exit_capture: String,
+    bookmark: Option<String>,
+    mode: u8,
+    duration_minutes: Option<i64>,
+) -> Result<(), String> {
+    use std::fs;
+    use std::io::Write;
+
+    let home = dirs::home_dir().ok_or("Could not find home directory")?;
+    let logs_dir = home.join(".taskflow/logs");
+    fs::create_dir_all(&logs_dir).map_err(|e| format!("Failed to create logs dir: {}", e))?;
+
+    let now = Local::now();
+    let date_str = now.format("%Y-%m-%d").to_string();
+    let time_str = now.format("%H:%M").to_string();
+    let log_path = logs_dir.join(format!("{}.md", date_str));
+
+    let file_exists = log_path.exists();
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .map_err(|e| format!("Failed to open log file: {}", e))?;
+
+    if !file_exists {
+        writeln!(file, "# {}\n", date_str).map_err(|e| e.to_string())?;
+    }
+
+    let mode_label = match mode {
+        1 => "Full",
+        2 => "Light",
+        3 => "Urgent",
+        _ => "Unknown",
+    };
+
+    let duration_str = match duration_minutes {
+        Some(d) if d > 0 => {
+            let h = d / 60;
+            let m = d % 60;
+            if h > 0 { format!("{}h {}m", h, m) } else { format!("{}m", m) }
+        }
+        _ => "\u{2014}".to_string(),
+    };
+
+    let template_str = template_name.as_deref().unwrap_or("None");
+    let bookmark_str = bookmark.as_deref().unwrap_or("\u{2014}");
+    let exit_str = if exit_capture.is_empty() { "\u{2014}" } else { &exit_capture };
+
+    writeln!(file, "## {} \u{2014} {}", time_str, task_name).map_err(|e| e.to_string())?;
+    writeln!(file, "- **Mode:** {}", mode_label).map_err(|e| e.to_string())?;
+    writeln!(file, "- **Template:** {}", template_str).map_err(|e| e.to_string())?;
+    writeln!(file, "- **Duration:** {}", duration_str).map_err(|e| e.to_string())?;
+    writeln!(file, "- **Exit notes:** {}", exit_str).map_err(|e| e.to_string())?;
+    writeln!(file, "- **Bookmark:** {}\n", bookmark_str).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
 fn hide_overlay(app: AppHandle) {
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = window.hide();
@@ -975,6 +1037,7 @@ pub fn run() {
             add_vocabulary_term,
             get_corrections,
             add_correction,
+            append_daily_log,
         ])
         .setup(|app| {
             // Register the global shortcut

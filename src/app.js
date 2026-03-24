@@ -741,8 +741,31 @@ class TaskFlowApp {
 
   // ---- Protocol: Exit → Transition ----
 
-  showTransitionState() {
+  async showTransitionState() {
     const { mode, exitCapture, taskName } = this._session;
+
+    // Fire-and-forget: log this context switch before any early returns
+    try {
+      const previousState = await invoke("get_state");
+      const startTime = previousState.task_started_at;
+      let durationMinutes = null;
+      if (startTime) {
+        const [h, m] = startTime.split(':').map(Number);
+        const now = new Date();
+        durationMinutes = Math.round((now.getHours() * 60 + now.getMinutes()) - (h * 60 + m));
+        if (durationMinutes < 0) durationMinutes = null;
+      }
+      invoke("append_daily_log", {
+        taskName: taskName || "Unknown",
+        templateName: this._session.template?.name || null,
+        exitCapture: exitCapture || "",
+        bookmark: this._session.extractedBookmark || null,
+        mode: mode,
+        durationMinutes: durationMinutes,
+      });
+    } catch (e) {
+      console.warn("[TaskFlow] Failed to log context switch:", e);
+    }
 
     const prompt = document.getElementById("transition-prompt");
     const bookmark = document.getElementById("transition-bookmark");
