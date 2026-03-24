@@ -827,6 +827,8 @@ class TaskFlowApp {
     }
 
     this._session.exitCapture = exitCapture;
+    const bookmarkNotes = document.getElementById("exit-bookmark");
+    if (bookmarkNotes) this._session.extractedBookmark = bookmarkNotes.value.trim();
     this.showTransitionState();
   }
 
