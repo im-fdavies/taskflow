@@ -28,7 +28,8 @@ class TaskFlowApp {
     this.pendingTask = null;
     this.transcription = "";
     this.mode = 1; // 1 = full, 2 = light, 3 = urgent
-    this._waveformInterval = null;
+    this._waveformRaf = null;
+    this._lastAmplitude = 0;
 
     // Audio recording — LISTENING state
     this._voiceCapture = new VoiceCapture({
@@ -36,7 +37,9 @@ class TaskFlowApp {
         const micDot = document.getElementById('mic-dot');
         if (micDot) micDot.classList.toggle('idle', !isRec);
       },
-      onAmplitude: () => {},
+      onAmplitude: (rms) => {
+        this._lastAmplitude = rms;
+      },
       onError: (msg) => {
         const status = document.getElementById('recording-status');
         if (status) { status.textContent = `⚠ ${msg}`; status.style.display = 'block'; }
@@ -1577,24 +1580,32 @@ class TaskFlowApp {
   startWaveform(id) {
     const container = document.getElementById(id);
     if (!container) return;
-
     const bars = container.children;
+    const barCount = bars.length;
+    const mid = barCount / 2;
+
     const animate = () => {
-      for (let i = 0; i < bars.length; i++) {
-        const h = 3 + Math.random() * 15;
+      const amp = Math.min(this._lastAmplitude * 8, 1);
+      for (let i = 0; i < barCount; i++) {
+        const distFromMid = Math.abs(i - mid) / mid;
+        const taper = 1 - distFromMid * 0.6;
+        const jitter = 0.85 + Math.random() * 0.3;
+        const h = 3 + amp * 15 * taper * jitter;
         bars[i].style.height = `${h}px`;
-        bars[i].style.opacity = `${0.3 + Math.random() * 0.7}`;
+        bars[i].style.opacity = `${0.3 + amp * 0.7 * taper}`;
       }
+      this._waveformRaf = requestAnimationFrame(animate);
     };
 
-    this._waveformInterval = setInterval(animate, 100);
+    this._waveformRaf = requestAnimationFrame(animate);
   }
 
   stopWaveform() {
-    if (this._waveformInterval) {
-      clearInterval(this._waveformInterval);
-      this._waveformInterval = null;
+    if (this._waveformRaf) {
+      cancelAnimationFrame(this._waveformRaf);
+      this._waveformRaf = null;
     }
+    this._lastAmplitude = 0;
     const container = document.getElementById("waveform");
     if (container) {
       for (const bar of container.children) {
