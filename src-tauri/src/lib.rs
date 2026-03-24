@@ -969,7 +969,102 @@ fn read_completion_context() -> Option<CompletionContext> {
 }
 
 // ---------------------------------------------------------------------------
-// Ollama local LLM fallback
+// Dashboard: read today's log sections + append lightweight todo
+// ---------------------------------------------------------------------------
+
+/// Extracts the body text of a named `## Heading` section from a log file.
+/// Returns everything between the heading and the next `## ` heading (or EOF).
+fn extract_section(content: &str, heading: &str) -> String {
+    let target = format!("## {}", heading);
+    let mut in_section = false;
+    let mut lines: Vec<&str> = Vec::new();
+
+    for line in content.lines() {
+        if line.trim_end() == target {
+            in_section = true;
+            continue;
+        }
+        if in_section {
+            if line.starts_with("## ") {
+                break;
+            }
+            lines.push(line);
+        }
+    }
+
+    lines.join("\n").trim().to_string()
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn read_daily_todos() -> Vec<String> {
+    let log_path = (|| {
+        let home = dirs::home_dir()?;
+        let date_str = Local::now().format("%Y-%m-%d").to_string();
+        Some(home.join(".taskflow/logs").join(format!("{}.md", date_str)))
+    })();
+
+    let log_path = match log_path {
+        Some(p) if p.exists() => p,
+        _ => return vec![],
+    };
+
+    let content = match std::fs::read_to_string(&log_path) {
+        Ok(c) => c,
+        Err(_) => return vec![],
+    };
+
+    extract_section(&content, "Todos")
+        .lines()
+        .filter(|l| l.starts_with("### "))
+        .map(|l| l.trim_start_matches("### ").to_string())
+        .collect()
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn read_daily_summary() -> Option<String> {
+    let home = dirs::home_dir()?;
+    let date_str = Local::now().format("%Y-%m-%d").to_string();
+    let log_path = home.join(".taskflow/logs").join(format!("{}.md", date_str));
+
+    if !log_path.exists() {
+        return None;
+    }
+
+    let content = std::fs::read_to_string(&log_path).ok()?;
+    let section = extract_section(&content, "Summary");
+    if section.is_empty() { None } else { Some(section) }
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn append_todo_entry(task_name: String) -> Result<(), String> {
+    use std::fs;
+
+    let home = dirs::home_dir().ok_or("Could not find home directory")?;
+    let logs_dir = home.join(".taskflow/logs");
+    fs::create_dir_all(&logs_dir).map_err(|e| format!("Failed to create logs dir: {}", e))?;
+
+    let now = Local::now();
+    let date_str = now.format("%Y-%m-%d").to_string();
+    let time_str = now.format("%H:%M").to_string();
+    let log_path = logs_dir.join(format!("{}.md", date_str));
+
+    let content = if log_path.exists() {
+        fs::read_to_string(&log_path).map_err(|e| format!("Failed to read log: {}", e))?
+    } else {
+        daily_log_skeleton(&date_str)
+    };
+
+    let entry = format!("### {} - {}\n\n", time_str, task_name);
+
+    let new_content = match find_section_byte_offset(&content, "Completed Work") {
+        Some(pos) => format!("{}{}{}", &content[..pos], entry, &content[pos..]),
+        None => format!("{}{}", content, entry),
+    };
+
+    fs::write(&log_path, new_content).map_err(|e| format!("Failed to write log: {}", e))?;
+
+    Ok(())
+}
 // ---------------------------------------------------------------------------
 
 #[tauri::command(rename_all = "camelCase")]
@@ -1110,6 +1205,14 @@ fn toggle_overlay(app: &AppHandle) {
     }
 }
 
+fn toggle_dashboard(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("overlay") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = window.emit("dashboard-opened", ());
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
@@ -1126,8 +1229,14 @@ pub fn run() {
                             Some(Modifiers::SUPER | Modifiers::SHIFT),
                             Code::Space,
                         );
+                        let ctrl_shift_d = Shortcut::new(
+                            Some(Modifiers::SUPER | Modifiers::SHIFT),
+                            Code::KeyD,
+                        );
                         if shortcut == &ctrl_shift_space {
                             toggle_overlay(app);
+                        } else if shortcut == &ctrl_shift_d {
+                            toggle_dashboard(app);
                         }
                     }
                 })
@@ -1150,6 +1259,9 @@ pub fn run() {
             generate_exit_question,
             read_agent_context,
             read_completion_context,
+            read_daily_todos,
+            read_daily_summary,
+            append_todo_entry,
             check_ollama,
             detect_mode_llm,
             get_vocabulary,
@@ -1166,6 +1278,12 @@ pub fn run() {
                 Code::Space,
             );
             app.global_shortcut().register(shortcut)?;
+
+            let dashboard_shortcut = Shortcut::new(
+                Some(Modifiers::SUPER | Modifiers::SHIFT),
+                Code::KeyD,
+            );
+            app.global_shortcut().register(dashboard_shortcut)?;
 
             // macOS: apply vibrancy to the overlay window
             #[cfg(target_os = "macos")]

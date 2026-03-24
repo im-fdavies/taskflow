@@ -20,6 +20,7 @@ const STATES = [
   "completion",
   "coaching",
   "gate",
+  "dashboard",
 ];
 
 class TaskFlowApp {
@@ -58,6 +59,13 @@ class TaskFlowApp {
       onStateChange: (isRec) => this._updateExitMicBtn('exit-bookmark-mic-btn', isRec),
       onAmplitude: () => {},
       onError: (msg) => console.error('Exit bookmark voice error:', msg),
+    });
+
+    // Audio recording — DASHBOARD state (push-to-talk)
+    this._dashboardVoiceCapture = new VoiceCapture({
+      onStateChange: () => {},
+      onAmplitude: () => {},
+      onError: (msg) => console.error('Dashboard voice error:', msg),
     });
 
     // P2a: template cache and current session
@@ -99,6 +107,11 @@ class TaskFlowApp {
       this.show("listening");
       this.startWaveform("waveform");
       this.startRecording();
+    });
+
+    // Listen for dashboard open event from Rust (Cmd+Shift+D)
+    await listen("dashboard-opened", () => {
+      this.showDashboard();
     });
 
     // Escape key closes the overlay
@@ -402,6 +415,7 @@ class TaskFlowApp {
     if (this._voiceCapture.isRecording()) await this._voiceCapture.stop().catch(() => {});
     if (this._exitVoiceCapture.isRecording()) await this._exitVoiceCapture.stop().catch(() => {});
     if (this._exitBookmarkVoiceCapture.isRecording()) await this._exitBookmarkVoiceCapture.stop().catch(() => {});
+    if (this._dashboardVoiceCapture.isRecording()) await this._dashboardVoiceCapture.stop().catch(() => {});
     try { await invoke("hide_overlay"); } catch (e) { console.error("[TaskFlow] Failed to hide overlay:", e); }
   }
 
@@ -637,6 +651,93 @@ class TaskFlowApp {
     if (mode !== 3) {
       this._fetchExitQuestion();
       this._checkAgentContext();
+    }
+  }
+
+  // ---- Dashboard ----
+
+  async showDashboard() {
+    this.show("dashboard");
+
+    // Load today's summary
+    const summaryEl = document.getElementById("dashboard-summary");
+    try {
+      const summary = await invoke("read_daily_summary");
+      if (summaryEl) summaryEl.textContent = summary || "No summary written yet for today.";
+    } catch (e) {
+      if (summaryEl) summaryEl.textContent = "—";
+    }
+
+    await this._refreshDashboardTodos();
+  }
+
+  async _refreshDashboardTodos() {
+    const list = document.getElementById("dashboard-todo-list");
+    if (!list) return;
+
+    try {
+      const todos = await invoke("read_daily_todos");
+      list.innerHTML = "";
+      if (todos.length === 0) {
+        list.innerHTML = '<div class="dashboard-empty">No todos logged today yet</div>';
+      } else {
+        for (const todo of todos) {
+          const div = document.createElement("div");
+          div.className = "dashboard-todo-item";
+          div.textContent = todo;
+          list.appendChild(div);
+        }
+      }
+    } catch (e) {
+      list.innerHTML = '<div class="dashboard-empty">Could not load todos</div>';
+    }
+  }
+
+  _parseTodoIntent(text) {
+    const addMatch = text.match(/add\s+(.+?)\s+to\s+(?:my\s+)?(?:todos?|list|tasks?)/i);
+    if (addMatch) return addMatch[1].trim();
+    const rememberMatch = text.match(/^(?:remember|remind me to?)\s+(.+)/i);
+    if (rememberMatch) return rememberMatch[1].trim();
+    return null;
+  }
+
+  async dashboardVoiceTap() {
+    const btn = document.getElementById("dashboard-voice-btn");
+    const hint = document.getElementById("dashboard-voice-hint");
+    const status = document.getElementById("dashboard-voice-status");
+
+    if (this._dashboardVoiceCapture.isRecording()) {
+      if (btn) { btn.disabled = true; btn.textContent = '…'; btn.classList.remove("recording"); }
+      if (hint) hint.style.display = "none";
+      try {
+        const text = await this._dashboardVoiceCapture.stop();
+        if (text) {
+          const taskName = this._parseTodoIntent(text);
+          if (taskName) {
+            await invoke("append_todo_entry", { taskName });
+            if (status) { status.textContent = `✓ Added: "${taskName}"`; status.style.display = "block"; }
+            await this._refreshDashboardTodos();
+            setTimeout(() => { if (status) status.style.display = "none"; }, 3000);
+          } else {
+            if (status) { status.textContent = `Couldn't parse that — try "add X to my todos"`; status.style.display = "block"; }
+            setTimeout(() => { if (status) status.style.display = "none"; }, 4000);
+          }
+        }
+      } catch (e) {
+        console.error("[TaskFlow] Dashboard voice failed:", e);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🎤'; }
+        if (hint) hint.style.display = "inline";
+      }
+    } else {
+      try {
+        await this._dashboardVoiceCapture.start();
+        if (btn) { btn.classList.add("recording"); btn.textContent = '⬛'; }
+        if (hint) hint.style.display = "none";
+        if (status) status.style.display = "none";
+      } catch (e) {
+        console.error("[TaskFlow] Dashboard mic start failed:", e);
+      }
     }
   }
 
