@@ -117,8 +117,10 @@ class TaskFlowApp {
     // Clicking the frosted backdrop closes the dashboard
     const dashboardBackdrop = document.getElementById("dashboard-backdrop");
     if (dashboardBackdrop) {
-      dashboardBackdrop.addEventListener("click", () => {
-        if (this.currentState === "dashboard") this.close();
+      dashboardBackdrop.addEventListener("click", (e) => {
+        if (e.target === dashboardBackdrop && this.currentState === "dashboard") {
+          this.close();
+        }
       });
     }
 

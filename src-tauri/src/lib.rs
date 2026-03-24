@@ -1222,8 +1222,8 @@ fn expand_for_dashboard(app: AppHandle) {
             let scale = monitor.scale_factor();
             let screen_h = monitor.size().height as f64 / scale;
             let screen_w = monitor.size().width as f64 / scale;
-            let _ = window.set_size(LogicalSize::new(460.0_f64, screen_h));
-            let _ = window.set_position(LogicalPosition::new(screen_w - 460.0_f64, 0.0_f64));
+            let _ = window.set_size(LogicalSize::new(screen_w, screen_h));
+            let _ = window.set_position(LogicalPosition::new(0.0_f64, 0.0_f64));
             let _ = window.set_shadow(false);
         }
     }

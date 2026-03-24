@@ -178,22 +178,19 @@
       </div>
 
       <!-- Dashboard backdrop (frosted overlay, click to close) -->
-      <div id="dashboard-backdrop" class="dashboard-backdrop"></div>
+      <div id="dashboard-backdrop" class="dashboard-backdrop">
+        <div class="dashboard-centre-voice" id="dashboard-centre-voice">
+          <button class="dashboard-mic-btn" id="dashboard-voice-btn" onclick="app.dashboardVoiceTap()">🎤</button>
+          <div class="dashboard-mic-hint" id="dashboard-voice-hint">Tap to add a todo</div>
+          <div class="dashboard-voice-status" id="dashboard-voice-status" style="display:none;"></div>
+        </div>
+      </div>
 
       <!-- State: dashboard -->
       <div id="s-dashboard" class="state">
         <div class="state-body">
-          <div class="ol-state">Dashboard</div>
-
           <div class="dashboard-section-label">Today's summary</div>
           <div class="dashboard-summary" id="dashboard-summary">—</div>
-
-          <div class="dashboard-section-label">Add a todo</div>
-          <div class="dashboard-voice-row">
-            <button class="dashboard-voice-btn" id="dashboard-voice-btn" onclick="app.dashboardVoiceTap()">🎤</button>
-            <span class="dashboard-voice-hint" id="dashboard-voice-hint">Tap and say "add X to my todos"</span>
-          </div>
-          <div class="dashboard-voice-status" id="dashboard-voice-status" style="display:none;"></div>
 
           <div class="dashboard-section-label">Outstanding</div>
           <div class="dashboard-todo-list" id="dashboard-todo-list">

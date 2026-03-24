@@ -29,7 +29,7 @@ html, body {
 }
 
 /* Interactive elements must not inherit the drag region */
-button, textarea, input, select, .exit-mic-btn, .word-token, [contenteditable], .dashboard-backdrop {
+button, textarea, input, select, .exit-mic-btn, .word-token, [contenteditable], .dashboard-backdrop, .dashboard-centre-voice, .dashboard-mic-btn {
   -webkit-app-region: no-drag;
 }
 
@@ -849,10 +849,12 @@ button, textarea, input, select, .exit-mic-btn, .word-token, [contenteditable], 
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
   z-index: 10;
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.3s ease;
 }
 
 .dashboard-backdrop.visible {
@@ -865,14 +867,16 @@ button, textarea, input, select, .exit-mic-btn, .word-token, [contenteditable], 
   top: 0;
   right: 0;
   bottom: 0;
-  width: 380px;
+  width: 340px;
   max-width: none;
   max-height: none;
   border-radius: 0;
   border: none;
-  border-left: 0.5px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  border-left: 0.5px solid rgba(255, 255, 255, 0.12);
+  background: rgba(28, 28, 32, 0.72);
+  backdrop-filter: blur(40px) saturate(1.6);
+  -webkit-backdrop-filter: blur(40px) saturate(1.6);
+  box-shadow: -1px 0 40px rgba(0, 0, 0, 0.3), inset 1px 0 0 rgba(255, 255, 255, 0.05);
   z-index: 11;
   display: flex;
   flex-direction: column;
@@ -889,111 +893,127 @@ button, textarea, input, select, .exit-mic-btn, .word-token, [contenteditable], 
 #s-dashboard .state-body {
   flex: 1;
   overflow-y: auto;
-  padding: 48px 22px 8px;
-  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  padding: 28px 24px 12px;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
 }
 
 #s-dashboard .state-body::-webkit-scrollbar { width: 4px; }
 #s-dashboard .state-body::-webkit-scrollbar-track { background: transparent; }
-#s-dashboard .state-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 2px; }
+#s-dashboard .state-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 2px; }
 
 #s-dashboard .footer {
-  padding: 12px 22px 18px;
-  background: rgba(30, 30, 40, 0.97);
+  padding: 16px 24px 20px;
+  background: rgba(20, 20, 26, 0.5);
   border-top: 0.5px solid rgba(255, 255, 255, 0.06);
-}
-
-.dashboard-section-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.3);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin: 14px 0 6px;
-}
-
-.dashboard-section-label:first-of-type {
-  margin-top: 4px;
-}
-
-.dashboard-summary {
-  font-size: 14px;
-  color: rgba(226, 232, 240, 0.65);
-  line-height: 1.5;
-  max-height: 58px;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
-
-.dashboard-voice-row {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   display: flex;
-  align-items: center;
   gap: 10px;
 }
 
-.dashboard-voice-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(99, 102, 241, 0.1);
-  border: 0.5px solid rgba(99, 102, 241, 0.28);
+.dashboard-section-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 20px 0 10px;
+}
+
+.dashboard-section-label:first-of-type {
+  margin-top: 0;
+}
+
+.dashboard-summary {
   font-size: 15px;
+  color: rgba(226, 232, 240, 0.75);
+  line-height: 1.55;
+  max-height: none;
+  overflow: visible;
+  display: block;
+}
+
+.dashboard-centre-voice {
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 170px);
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  z-index: 10;
+}
+
+.dashboard-mic-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  font-size: 26px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
-  flex-shrink: 0;
+  transition: all 0.2s ease;
+  -webkit-app-region: no-drag;
 }
 
-.dashboard-voice-btn:hover {
-  background: rgba(99, 102, 241, 0.2);
+.dashboard-mic-btn:hover {
+  background: rgba(99, 102, 241, 0.22);
+  border-color: rgba(99, 102, 241, 0.5);
+  transform: scale(1.05);
 }
 
-.dashboard-voice-btn.recording {
-  background: rgba(239, 68, 68, 0.16);
-  border-color: rgba(239, 68, 68, 0.45);
+.dashboard-mic-btn.recording {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.5);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
-.dashboard-voice-hint {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.32);
+.dashboard-mic-hint {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.35);
+  text-align: center;
 }
 
 .dashboard-voice-status {
-  margin: 6px 0 2px;
-  padding: 7px 10px;
-  background: rgba(20, 184, 166, 0.06);
-  border-left: 2px solid rgba(20, 184, 166, 0.3);
-  border-radius: 0 8px 8px 0;
-  font-size: 13px;
-  color: rgba(20, 184, 166, 0.8);
+  margin: 0;
+  padding: 8px 16px;
+  background: rgba(20, 184, 166, 0.08);
+  border: 0.5px solid rgba(20, 184, 166, 0.2);
+  border-radius: 10px;
+  font-size: 14px;
+  color: rgba(20, 184, 166, 0.85);
+  text-align: center;
+  max-width: 260px;
 }
 
 .dashboard-todo-list {
-  max-height: 170px;
+  max-height: none;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.1) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
 }
 
 .dashboard-todo-item {
-  font-size: 14px;
-  color: rgba(226, 232, 240, 0.8);
-  padding: 6px 0;
-  border-bottom: 0.5px solid rgba(255, 255, 255, 0.05);
-  line-height: 1.4;
+  font-size: 15px;
+  color: rgba(226, 232, 240, 0.85);
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  border-bottom: none;
+  line-height: 1.45;
 }
 
 .dashboard-todo-item:last-child {
-  border-bottom: none;
+  margin-bottom: 0;
 }
 
 .dashboard-empty {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.25);
-  padding: 6px 0;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.3);
+  padding: 10px 0;
 }
