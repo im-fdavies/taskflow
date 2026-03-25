@@ -5,6 +5,7 @@
 
 import { VoiceCapture } from './voice-capture.js';
 import { detectMode as _detectMode, parseTranscription, matchTemplate as _matchTemplate, parseTodoIntent } from './logic.js';
+import { populateWaveform, startWaveform, stopWaveform } from './waveform.js';
 
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
@@ -30,7 +31,6 @@ class TaskFlowApp {
     this.pendingTask = null;
     this.transcription = "";
     this.mode = 1; // 1 = full, 2 = light, 3 = urgent
-    this._waveformRaf = null;
     this._lastAmplitude = 0;
 
     // Audio recording — LISTENING state
@@ -106,7 +106,7 @@ class TaskFlowApp {
     // Listen for overlay open event from Rust
     await listen("overlay-opened", () => {
       this.show("listening");
-      this.startWaveform("waveform");
+      startWaveform("waveform", () => this._lastAmplitude);
       this.startRecording();
     });
 
@@ -188,7 +188,7 @@ class TaskFlowApp {
     }
 
     // Populate waveform bars on load
-    this.populateWaveform("waveform");
+    populateWaveform("waveform");
 
     // Wire EXIT state mic buttons
     const exitMicBtn = document.getElementById('exit-mic-btn');
@@ -1329,7 +1329,7 @@ class TaskFlowApp {
     if (btn) { btn.disabled = true; btn.textContent = 'Processing…'; }
     if (hint) hint.textContent = '';
     if (status) { status.textContent = 'Transcribing…'; status.style.display = 'block'; }
-    this.stopWaveform();
+    stopWaveform();
 
     try {
       const text = await this._voiceCapture.stop();
@@ -1363,8 +1363,8 @@ class TaskFlowApp {
     if (btn) { btn.disabled = false; btn.textContent = "Done"; btn.onclick = () => this.stopRecording(); }
     if (hint) hint.textContent = "Speak, then press Enter";
     this.transcription = "";
-    this.populateWaveform("waveform");
-    this.startWaveform("waveform");
+    populateWaveform("waveform");
+    startWaveform("waveform", () => this._lastAmplitude);
     this.startRecording();
   }
 
@@ -1720,67 +1720,14 @@ class TaskFlowApp {
     }
   }
 
-  // ---- Waveform visualisation ----
-
-  populateWaveform(id) {
-    const container = document.getElementById(id);
-    if (!container) return;
-    container.innerHTML = "";
-
-    for (let i = 0; i < 36; i++) {
-      const bar = document.createElement("span");
-      bar.style.height = `${3 + Math.random() * 4}px`;
-      bar.style.opacity = "0.3";
-      container.appendChild(bar);
-    }
-  }
-
-  startWaveform(id) {
-    const container = document.getElementById(id);
-    if (!container) return;
-    const bars = container.children;
-    const barCount = bars.length;
-    const mid = barCount / 2;
-
-    const animate = () => {
-      const amp = Math.min(this._lastAmplitude * 8, 1);
-      for (let i = 0; i < barCount; i++) {
-        const distFromMid = Math.abs(i - mid) / mid;
-        const taper = 1 - distFromMid * 0.6;
-        const jitter = 0.85 + Math.random() * 0.3;
-        const h = 3 + amp * 15 * taper * jitter;
-        bars[i].style.height = `${h}px`;
-        bars[i].style.opacity = `${0.3 + amp * 0.7 * taper}`;
-      }
-      this._waveformRaf = requestAnimationFrame(animate);
-    };
-
-    this._waveformRaf = requestAnimationFrame(animate);
-  }
-
-  stopWaveform() {
-    if (this._waveformRaf) {
-      cancelAnimationFrame(this._waveformRaf);
-      this._waveformRaf = null;
-    }
-    this._lastAmplitude = 0;
-    const container = document.getElementById("waveform");
-    if (container) {
-      for (const bar of container.children) {
-        bar.style.height = "3px";
-        bar.style.opacity = "0.3";
-      }
-    }
-  }
-
   // ---- Demo ----
 
   async demo() {
     this.show("listening");
-    this.startWaveform("waveform");
+    startWaveform("waveform", () => this._lastAmplitude);
     await this.wait(2000);
 
-    this.stopWaveform();
+    stopWaveform();
     this.transcription = "I need to do PR amends";
     await this.wait(300);
     this.showConfirmation();
