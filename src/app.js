@@ -4,6 +4,7 @@
 // ===================================================================
 
 import { VoiceCapture } from './voice-capture.js';
+import { detectMode as _detectMode, parseTranscription, matchTemplate as _matchTemplate, parseTodoIntent } from './logic.js';
 
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
@@ -215,68 +216,14 @@ class TaskFlowApp {
   // Returns { mode: 1|2|3, confidence: 'keyword'|'heuristic'|'default' }
 
   detectMode(text, currentTask) {
-    const lower = text.toLowerCase();
-
-    // Mode 3: urgent — highest priority
-    if (/\burgent\b/.test(lower)) {
-      return { mode: 3, confidence: "keyword" };
-    }
-
-    // Mode 1: interrupted/mid-task signals — checked before mode 2
-    const mode1Keywords = [
-      "interrupted", "pulled away", "in the middle of",
-      "was working on", "got distracted",
-    ];
-    if (mode1Keywords.some((k) => lower.includes(k))) {
-      return { mode: 1, confidence: "keyword" };
-    }
-
-    // Mode 4: completion — user finished a task, no next task implied
-    const mode4Keywords = [
-      "i just finished", "i've completed", "i've finished",
-      "just completed", "task is done", "wrapped up",
-      "all done with", "finished up",
-    ];
-    if (mode4Keywords.some((k) => lower.includes(k))) {
-      return { mode: 4, confidence: "keyword" };
-    }
-
-    // Mode 2: clean switch signals
-    const mode2Keywords = [
-      "finished", "done with", "completed", "moving on to",
-      "same pr", "same ticket", "related to", "continuing",
-    ];
-    if (mode2Keywords.some((k) => lower.includes(k))) {
-      return { mode: 2, confidence: "keyword" };
-    }
-
-    // Mode 2 heuristic: task name overlaps with current active task
-    if (currentTask) {
-      const currentWords = currentTask.toLowerCase().split(/\s+/);
-      const hasOverlap = currentWords.some(
-        (w) => w.length > 3 && lower.includes(w)
-      );
-      if (hasOverlap) {
-        return { mode: 2, confidence: "heuristic" };
-      }
-    }
-
-    // Default: Mode 1 (full protocol — safer to over-decompress)
-    return { mode: 1, confidence: "default" };
+    return _detectMode(text, currentTask);
   }
 
   // ---- Template matching ----
   // Returns the best matching template object or null
 
   matchTemplate(text) {
-    const lower = text.toLowerCase();
-    for (const template of this._templates) {
-      const triggers = Array.isArray(template.triggers) ? template.triggers : [];
-      if (triggers.some((t) => lower.includes(t.toLowerCase()))) {
-        return template;
-      }
-    }
-    return null;
+    return _matchTemplate(text, this._templates);
   }
 
   // ---- Transcription parsing (marker-based) ----
@@ -284,116 +231,7 @@ class TaskFlowApp {
   // and extracts task name, exit context, and bookmark from the typed segments.
 
   _parseTranscription(text) {
-    const result = { taskName: null, exitContext: null, bookmark: null };
-    if (!text) return result;
-
-    // Semantic markers ordered by specificity (most specific first within each type).
-    // Content AFTER each marker (until the next marker or end of text) belongs to that type.
-    const MARKERS = [
-      // Bookmark boundaries
-      { re: /\bwhen i (?:come back|return|get back),?\s*(?:i'll\s+)?/i, type: "bookmark" },
-      { re: /\b(?:need to |want to |should |i'll )?(pick up|come back to|remember to|get back to)\s+/i, type: "bookmark", keepVerb: true },
-
-      // Exit markers (what user was/is doing — switching FROM)
-      { re: /\bi(?:'m| am) currently (?:working on|doing|on)\s+/i, type: "exit" },
-      { re: /\bcurrently (?:working on|doing|on)\s+/i, type: "exit" },
-      { re: /\bi was (?:working on|doing|in the middle of)\s+/i, type: "exit" },
-      { re: /\bi was\s+(?=\w+ing\b)/i, type: "exit" },
-      { re: /\bwas (?:working on|doing)\s+/i, type: "exit" },
-      { re: /\b(?:been doing|was on|coming from|leaving)\s+/i, type: "exit" },
-      { re: /\bdone with\s+/i, type: "exit" },
-      { re: /\bfinished(?:\s+with)?\s+/i, type: "exit" },
-
-      // Entry markers (what user is switching TO)
-      { re: /\bi(?:'m| am) (?:switching to|moving (?:on )?to|going to)\s+/i, type: "entry" },
-      { re: /\b(?:switching to|moving on to|moving to)\s+/i, type: "entry" },
-      { re: /\bneed to (?:switch to|do|work on|handle|look at)\s+/i, type: "entry" },
-      { re: /\bi (?:need|want|have) to\s+/i, type: "entry" },
-      { re: /\b(?:let me|i should(?:\s+probably)?)\s+/i, type: "entry" },
-
-      // Mode signal (urgent at start only)
-      { re: /^urgent\b[,.]?\s*/i, type: "mode_signal" },
-    ];
-
-    // Find first occurrence of each marker pattern in the text
-    const found = [];
-    for (const mk of MARKERS) {
-      const m = text.match(mk.re);
-      if (m) {
-        found.push({
-          start: m.index,
-          end: m.index + m[0].length,
-          type: mk.type,
-          matchText: m[0],
-          keepVerb: mk.keepVerb || false,
-          verbGroup: m[1] || null,
-        });
-      }
-    }
-
-    // Sort by position; at same position prefer longer match. Deduplicate overlaps.
-    found.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
-    const markers = [];
-    let lastEnd = -1;
-    for (const m of found) {
-      if (m.start >= lastEnd) {
-        markers.push(m);
-        lastEnd = m.end;
-      }
-    }
-
-    console.log("[TaskFlow] Markers:", markers.map((m) => `${m.type}@${m.start}: "${m.matchText.trim()}"`));
-
-    // Build typed segments from the gaps between markers
-    const segments = [];
-
-    if (markers.length === 0) {
-      segments.push({ type: "unclassified", text: text.replace(/[.!?,\s]+$/, "").trim() });
-    } else {
-      // Any text before the first marker
-      if (markers[0].start > 0) {
-        const pre = text.substring(0, markers[0].start).replace(/[.!?,\s]+$/, "").trim();
-        if (pre) segments.push({ type: "pre", text: pre });
-      }
-
-      for (let i = 0; i < markers.length; i++) {
-        const mk = markers[i];
-        const nextStart = i + 1 < markers.length ? markers[i + 1].start : text.length;
-        let content = text.substring(mk.end, nextStart).replace(/^[.!?,\s]+/, "").replace(/[.!?,\s]+$/, "").trim();
-
-        if (mk.keepVerb && mk.verbGroup) {
-          content = mk.verbGroup + " " + content;
-        }
-
-        if (content) {
-          segments.push({ type: mk.type, text: content });
-        }
-      }
-    }
-
-    console.log("[TaskFlow] Segments:", segments.map((s) => `${s.type}: "${s.text}"`));
-
-    const cap = (s) => {
-      if (!s) return null;
-      s = s.replace(/[.!?]+$/, "").trim();
-      return s ? s.charAt(0).toUpperCase() + s.slice(1) : null;
-    };
-
-    const entry = segments.find((s) => s.type === "entry");
-    const exit = segments.find((s) => s.type === "exit");
-    const bookmark = segments.find((s) => s.type === "bookmark");
-    const mode = segments.find((s) => s.type === "mode_signal");
-    const unclassified = segments.find((s) => s.type === "unclassified");
-    const pre = segments.find((s) => s.type === "pre");
-
-    // Task name: entry > mode_signal remainder > unclassified > pre-marker text > full text
-    result.taskName = cap(entry?.text) || cap(mode?.text) || cap(unclassified?.text) || cap(pre?.text) || cap(text);
-
-    if (exit) result.exitContext = cap(exit.text);
-    if (bookmark) result.bookmark = cap(bookmark.text);
-
-    console.log("[TaskFlow] Extracted:", result);
-    return result;
+    return parseTranscription(text);
   }
 
   // ---- State transitions ----
@@ -806,21 +644,7 @@ class TaskFlowApp {
   }
 
   _parseTodoIntent(text, fromDashboard = false) {
-    // Try to extract task name from structured phrasing
-    // Match the tail first: "to my to-do list", "to my todos", "to my list", etc.
-    const tailPattern = /\s+to\s+(?:my\s+)?(?:to[- ]?do\s+)?(?:todos?|list|tasks?)\s*\.?$/i;
-    if (/^add\s+/i.test(text) && tailPattern.test(text)) {
-      const task = text.replace(/^add\s+/i, '').replace(tailPattern, '').trim();
-      if (task) return task;
-    }
-    const rememberMatch = text.match(/^(?:remember|remind me to?)\s+(.+)/i);
-    if (rememberMatch) return rememberMatch[1].trim();
-    // Strip leading filler words if present
-    const stripped = text.replace(/^(?:add|todo|task|I need to|I want to|please)\s+/i, '').trim();
-    // If called from dashboard, the user already expressed intent by tapping
-    // the mic on the todo screen - treat whatever they said as the todo
-    if (fromDashboard && stripped) return stripped;
-    return null;
+    return parseTodoIntent(text, fromDashboard);
   }
 
   async dashboardVoiceTap() {
