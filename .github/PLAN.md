@@ -173,15 +173,20 @@ src/
 5. CSS custom properties extraction deferred to Phase 4 (quality fixes)
 6. Visual regression check requires `npx tauri dev` — build verified via `npx vite build`
 
-### Phase 3 — JS Module Extraction (Medium Risk)
+### Phase 3 — JS Module Extraction (Medium Risk) ✅ DONE
 
-**Steps:**
-1. Create `src/dom-refs.js` — centralize all `getElementById` calls into a single init function
-2. Extract `src/mode-detection.js` (pure functions, no DOM) — easiest to test
-3. Extract `src/waveform.js` (self-contained animation)
-4. Extract flow modules one at a time: `dashboard.js` → `exit-flow.js` → `entry-flow.js` → `completion-flow.js`
-5. Extract `src/transcription-editor.js` last (most DOM-coupled)
-6. Slim `app.js` to orchestrator (~200 lines)
+> Completed 2026-03-25. app.js reduced from 1,799 → 728 lines (~60% reduction). 7 modules extracted, each committed and verified independently.
+
+**Modules extracted:**
+1. ✅ `src/logic.js` — pure functions (detectMode, parseTranscription, matchTemplate, parseTodoIntent) — extracted earlier with test suite
+2. ✅ `src/waveform.js` — waveform animation (populateWaveform, startWaveform, stopWaveform)
+3. ✅ `src/transcription-editor.js` — inline word correction UI (renderClickableTranscript + all editing helpers)
+4. ✅ `src/completion-flow.js` — Mode 4 completion capture (showCompletionState, submitCompletion, loadCompletionContext)
+5. ✅ `src/dashboard.js` — todo list panel (showDashboard, refreshTodos, voiceTap, dismissTodoAdded)
+6. ✅ `src/exit-flow.js` — exit state (showExitState, submitExit, fetchExitQuestion, checkAgentContext, toggleExitVoice)
+7. ✅ `src/entry-flow.js` — transition + entry state (showTransitionState, showEntryState, fetchClarificationQuestions, renderPhases)
+
+**Deferred:** `dom-refs.js` — centralized DOM element cache. Not needed for module extraction; each module queries its own elements. Can be added later if fragility becomes an issue.
 
 **Safe commit point:** After each module extraction. Test by opening app and running through the flow.
 
