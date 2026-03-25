@@ -21,6 +21,14 @@ import {
   dismissTodoAdded as _dismissTodoAdded,
   setLastAddedTodo,
 } from './dashboard.js';
+import {
+  showExitState as _showExitState,
+  submitExit as _submitExit,
+  skipExitWithExtracted as _skipExitWithExtracted,
+  loadAgentContext as _loadAgentContext,
+  updateExitMicBtn,
+  toggleExitVoice,
+} from './exit-flow.js';
 
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
@@ -65,14 +73,14 @@ class TaskFlowApp {
 
     // Audio recording — EXIT state (main notes)
     this._exitVoiceCapture = new VoiceCapture({
-      onStateChange: (isRec) => this._updateExitMicBtn('exit-mic-btn', isRec),
+      onStateChange: (isRec) => updateExitMicBtn('exit-mic-btn', isRec),
       onAmplitude: () => {},
       onError: (msg) => console.error('Exit voice error:', msg),
     });
 
     // Audio recording — EXIT state (bookmark)
     this._exitBookmarkVoiceCapture = new VoiceCapture({
-      onStateChange: (isRec) => this._updateExitMicBtn('exit-bookmark-mic-btn', isRec),
+      onStateChange: (isRec) => updateExitMicBtn('exit-bookmark-mic-btn', isRec),
       onAmplitude: () => {},
       onError: (msg) => console.error('Exit bookmark voice error:', msg),
     });
@@ -163,11 +171,11 @@ class TaskFlowApp {
       if (e.key === 'Enter') {
         // If exit voice is recording, Enter stops it
         if (this._exitVoiceCapture.isRecording()) {
-          this._toggleExitVoice('exit-notes', this._exitVoiceCapture, 'exit-mic-btn');
+          toggleExitVoice('exit-notes', this._exitVoiceCapture, 'exit-mic-btn');
           return;
         }
         if (this._exitBookmarkVoiceCapture.isRecording()) {
-          this._toggleExitVoice('exit-bookmark', this._exitBookmarkVoiceCapture, 'exit-bookmark-mic-btn');
+          toggleExitVoice('exit-bookmark', this._exitBookmarkVoiceCapture, 'exit-bookmark-mic-btn');
           return;
         }
         // Don't intercept Enter inside exit textareas
@@ -207,10 +215,10 @@ class TaskFlowApp {
 
     // Wire EXIT state mic buttons
     const exitMicBtn = document.getElementById('exit-mic-btn');
-    if (exitMicBtn) exitMicBtn.addEventListener('click', () => this._toggleExitVoice('exit-notes', this._exitVoiceCapture, 'exit-mic-btn'));
+    if (exitMicBtn) exitMicBtn.addEventListener('click', () => toggleExitVoice('exit-notes', this._exitVoiceCapture, 'exit-mic-btn'));
 
     const exitBookmarkMicBtn = document.getElementById('exit-bookmark-mic-btn');
-    if (exitBookmarkMicBtn) exitBookmarkMicBtn.addEventListener('click', () => this._toggleExitVoice('exit-bookmark', this._exitBookmarkVoiceCapture, 'exit-bookmark-mic-btn'));
+    if (exitBookmarkMicBtn) exitBookmarkMicBtn.addEventListener('click', () => toggleExitVoice('exit-bookmark', this._exitBookmarkVoiceCapture, 'exit-bookmark-mic-btn'));
 
     // Load current task state
     this.refreshState();
@@ -296,7 +304,6 @@ class TaskFlowApp {
       if (ctxBtn) ctxBtn.style.display = 'none';
       const ctxLoaded = document.getElementById('exit-context-loaded');
       if (ctxLoaded) ctxLoaded.style.display = 'none';
-      this._agentContextContent = null;
     }
   }
 
@@ -477,117 +484,11 @@ class TaskFlowApp {
   }
 
   showExitState() {
-    const { mode, taskName, extractedExit, extractedBookmark } = this._session;
-    console.log("[TaskFlow] EXIT pre-pop:", { extractedExit, extractedBookmark });
-
-    const label = document.getElementById("exit-label");
-    const prompt = document.getElementById("exit-prompt");
-    const subtitle = document.getElementById("exit-subtitle");
-    const notes = document.getElementById("exit-notes");
-    const skipBtn = document.getElementById("exit-skip-btn");
-    const submitBtn = document.getElementById("exit-submit-btn");
-
-    // Reset
-    if (notes) notes.value = "";
-
-    // Mode 3 with extracted exit context: skip exit entirely
-    if (mode === 3 && extractedExit) {
-      this._session.exitCapture = extractedExit;
-      this.showTransitionState();
-      return;
-    }
-
-    if (mode === 3) {
-      if (label) label.textContent = "Exit · Urgent";
-      if (prompt) prompt.textContent = `Capturing: ${taskName}`;
-      if (subtitle) subtitle.textContent = "One sentence — where are you leaving off?";
-      if (notes) notes.placeholder = "One sentence on where you are...";
-      if (notes) notes.rows = 2;
-      if (skipBtn) skipBtn.style.display = "none";
-      if (submitBtn) submitBtn.textContent = "Go →";
-    } else if (mode === 2) {
-      if (label) label.textContent = "Exit · Light";
-      if (prompt) prompt.textContent = `Switching to: ${taskName}`;
-      if (subtitle) subtitle.textContent = "Quick note — or skip if the switch is clean.";
-      if (notes) notes.placeholder = "Optional: where you're leaving off...";
-      if (notes) notes.rows = 2;
-      if (skipBtn) skipBtn.style.display = "inline-flex";
-      if (submitBtn) submitBtn.textContent = "Continue →";
-    } else {
-      // Mode 1 — full protocol
-      if (label) label.textContent = "Exit · Full";
-      if (prompt) prompt.textContent = "Where are you leaving off?";
-      if (subtitle) subtitle.textContent = "What were you doing? What state is the work in? What would you pick up first if you came back?";
-      if (notes) notes.placeholder = "What were you just doing? What state is it in?";
-      if (notes) notes.rows = 3;
-      if (skipBtn) skipBtn.style.display = "none";
-      if (submitBtn) submitBtn.textContent = "Continue →";
-    }
-
-    // Pre-populate exit notes: set CSS class/hint before show(), but defer the
-    // value assignment to after show(). WKWebView resets textarea.value to the
-    // element's defaultValue ("") during first layout, which happens when the
-    // parent #s-exit transitions from display:none → display:flex via .active.
-    // Assigning after show() means the element is already laid out — no reset.
-    if (extractedExit && notes) {
-      notes.classList.add("prefilled");
-      const hintEl = document.getElementById("exit-prefilled-hint");
-      if (hintEl) { hintEl.textContent = "From your description"; hintEl.style.display = "block"; }
-    } else {
-      if (notes) notes.classList.remove("prefilled");
-      const hintEl = document.getElementById("exit-prefilled-hint");
-      if (hintEl) hintEl.style.display = "none";
-    }
-
-    // Show/hide bookmark row (Mode 1 only)
-    const bookmarkLabel = document.getElementById('exit-bookmark-label');
-    const bookmarkRow = document.getElementById('exit-bookmark-row');
-    const bookmarkNotes = document.getElementById('exit-bookmark');
-    const showBookmark = mode === 1;
-    if (bookmarkLabel) bookmarkLabel.style.display = showBookmark ? 'block' : 'none';
-    if (bookmarkRow) bookmarkRow.style.display = showBookmark ? 'flex' : 'none';
-    if (bookmarkNotes) bookmarkNotes.value = '';
-
-    // Pre-populate bookmark from transcription extraction
-    if (extractedBookmark && bookmarkNotes && showBookmark) {
-      bookmarkNotes.value = extractedBookmark;
-      bookmarkNotes.classList.add("prefilled");
-      const bmHint = document.getElementById("exit-bookmark-prefilled-hint");
-      if (bmHint) { bmHint.textContent = "From your description"; bmHint.style.display = "block"; }
-    } else {
-      if (bookmarkNotes) bookmarkNotes.classList.remove("prefilled");
-      const bmHint = document.getElementById("exit-bookmark-prefilled-hint");
-      if (bmHint) bmHint.style.display = "none";
-    }
-
-    // Show "Looks right — skip to next" when both fields have content
-    const hasExit = !!(extractedExit);
-    const hasBookmark = !!(extractedBookmark && showBookmark);
-    if (hasExit && hasBookmark) {
-      if (skipBtn) {
-        skipBtn.style.display = "inline-flex";
-        skipBtn.textContent = "Looks right — skip →";
-        skipBtn.onclick = () => this.skipExitWithExtracted();
-      }
-    } else if (mode === 2 && hasExit) {
-      // Mode 2 with pre-populated context: show skip more prominently
-      if (skipBtn) {
-        skipBtn.style.display = "inline-flex";
-        skipBtn.textContent = "Looks right — skip →";
-        skipBtn.onclick = () => this.skipExitWithExtracted();
-      }
-    }
-
-    this.show('exit');
-    // Apply value after show() — #s-exit is now display:flex so WKWebView
-    // won't reset the textarea on first layout.
-    if (extractedExit && notes) notes.value = extractedExit;
-    // Focus the textarea after transition, then fire exit interview question
-    setTimeout(() => { if (notes) notes.focus(); }, 200);
-    if (mode !== 3) {
-      this._fetchExitQuestion();
-      this._checkAgentContext();
-    }
+    _showExitState(this._session, {
+      showState: (s) => this.show(s),
+      showTransitionState: () => this.showTransitionState(),
+      skipExitWithExtracted: () => this.skipExitWithExtracted(),
+    });
   }
 
   // ---- Dashboard ----
@@ -631,125 +532,25 @@ class TaskFlowApp {
   }
 
   skipExitWithExtracted() {
-    const notes = document.getElementById("exit-notes");
-    const bookmarkNotes = document.getElementById("exit-bookmark");
-    this._session.exitCapture = notes ? notes.value.trim() : "";
-    this._session.extractedBookmark = bookmarkNotes ? bookmarkNotes.value.trim() : "";
+    const result = _skipExitWithExtracted();
+    this._session.exitCapture = result.exitCapture;
+    this._session.extractedBookmark = result.bookmark;
     this.showTransitionState();
   }
 
-  async _fetchExitQuestion() {
-    const { transcription, exitCapture, extractedExit, taskName, template } = this._session;
-
-    const nudge = document.getElementById('exit-question-nudge');
-    const thinking = document.getElementById('exit-question-thinking');
-    const body = document.getElementById('exit-question-body');
-    const textEl = document.getElementById('exit-question-text');
-    if (!nudge || !thinking || !body || !textEl) return;
-
-    // Reset
-    nudge.style.display = 'block';
-    thinking.style.display = 'inline';
-    body.style.display = 'none';
-    textEl.textContent = '';
-
-    const exitContext = extractedExit || exitCapture || '';
-    const templateName = template ? (template.name || '') : '';
-
-    try {
-      const question = await Promise.race([
-        invoke('generate_exit_question', {
-          transcription: transcription || '',
-          exitContext,
-          taskName: taskName || '',
-          templateName,
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
-      ]);
-
-      thinking.style.display = 'none';
-
-      if (!question) {
-        nudge.style.display = 'none';
-        return;
-      }
-
-      textEl.textContent = question;
-      body.style.display = 'flex';
-    } catch (err) {
-      // Silent fail — nudge stays hidden
-      nudge.style.display = 'none';
-      thinking.style.display = 'none';
-    }
-  }
-
-  async _checkAgentContext() {
-    const btn = document.getElementById('exit-context-btn');
-    if (!btn) return;
-
-    btn.style.display = 'none';
-    this._agentContextContent = null;
-
-    try {
-      const context = await invoke('read_agent_context');
-      if (context) {
-        this._agentContextContent = context;
-        btn.style.display = 'block';
-      }
-    } catch (err) {
-      // Silent fail — no context available
-    }
-  }
-
   loadAgentContext() {
-    const btn = document.getElementById('exit-context-btn');
-    const notes = document.getElementById('exit-notes');
-    if (!this._agentContextContent || !notes) return;
-
-    // Append context to existing notes (don't replace what the user typed)
-    const existing = notes.value.trim();
-    const separator = existing ? '\n\n---\n' : '';
-    notes.value = existing + separator + this._agentContextContent;
-    notes.classList.add('prefilled');
-
-    // Replace the button with a "loaded" confirmation
-    if (btn) {
-      btn.style.display = 'none';
-    }
-    const loadedEl = document.getElementById('exit-context-loaded');
-    if (loadedEl) {
-      loadedEl.style.display = 'block';
-    }
-
-    // Focus at end of textarea
-    notes.focus();
-    notes.setSelectionRange(notes.value.length, notes.value.length);
+    _loadAgentContext();
   }
 
   submitExit() {
-    const notes = document.getElementById("exit-notes");
-    const exitCapture = notes ? notes.value.trim() : "";
-
-    // Mode 1: require something
-    if (this._session.mode === 1 && !exitCapture) {
-      const notes_el = document.getElementById("exit-notes");
-      if (notes_el) {
-        notes_el.style.borderColor = "rgba(239, 68, 68, 0.5)";
-        notes_el.placeholder = "Required — what state is your work in?";
-        notes_el.focus();
-        setTimeout(() => { notes_el.style.borderColor = ""; }, 2000);
-      }
-      return;
-    }
-
-    this._session.exitCapture = exitCapture;
-    const bookmarkNotes = document.getElementById("exit-bookmark");
-    if (bookmarkNotes) this._session.extractedBookmark = bookmarkNotes.value.trim();
+    const result = _submitExit(this._session);
+    if (!result.valid) return;
+    this._session.exitCapture = result.exitCapture;
+    this._session.extractedBookmark = result.bookmark;
     this.showTransitionState();
   }
 
   skipExit() {
-    // Only available in Mode 2
     this._session.exitCapture = "";
     this.showTransitionState();
   }
@@ -1121,45 +922,6 @@ class TaskFlowApp {
     populateWaveform("waveform");
     startWaveform("waveform", () => this._lastAmplitude);
     this.startRecording();
-  }
-
-  _updateExitMicBtn(btnId, isRecording) {
-    const btn = document.getElementById(btnId);
-    if (!btn) return;
-    if (isRecording) {
-      btn.textContent = '⏹';
-      btn.classList.add('recording');
-    } else {
-      btn.textContent = '🎤';
-      btn.classList.remove('recording');
-    }
-  }
-
-  async _toggleExitVoice(textareaId, capture, btnId) {
-    if (capture.isRecording()) {
-      const btn = document.getElementById(btnId);
-      if (btn) { btn.disabled = true; btn.textContent = '…'; }
-      try {
-        const text = await capture.stop();
-        if (text) {
-          const ta = document.getElementById(textareaId);
-          if (ta) {
-            ta.value = ta.value ? ta.value + ' ' + text : text;
-          }
-        }
-      } catch (err) {
-        console.error('Exit transcription failed:', err);
-      } finally {
-        const btn2 = document.getElementById(btnId);
-        if (btn2) { btn2.disabled = false; }
-      }
-    } else {
-      try {
-        await capture.start();
-      } catch (err) {
-        console.error('Exit mic start failed:', err);
-      }
-    }
   }
 
   // ---- Demo ----
