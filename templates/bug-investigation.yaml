@@ -1,0 +1,37 @@
+# Bug Investigation — Workflow Template
+# Triggered when switching to debug or bug fix work
+
+id: bug-investigation
+name: Bug investigation
+triggers:
+  - bug
+  - investigating bug
+  - debugging
+  - bug fix
+  - fixing bug
+  - defect
+  - issue investigation
+
+phases:
+  - name: Reproduce it first
+    guidance: Confirm you can see the bug before touching code. What are the exact steps?
+    colour: amber
+
+  - name: Trace the cause
+    guidance: Follow the data, not your assumptions. Where does it actually break?
+    colour: teal
+
+  - name: Fix and verify
+    guidance: Smallest change that fixes it. Does the original reproduction now pass?
+    colour: purple
+
+signals:
+  - condition: phase_duration > 30m AND current_phase == "trace"
+    prompt: >
+      30 minutes tracing - are you narrowing down or going in circles?
+    actions: [narrowing_down, stepping_back]
+
+gates:
+  - before: complete
+    prompt: Have you verified the original reproduction case passes?
+    actions: [not_yet, done]

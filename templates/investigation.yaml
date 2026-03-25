@@ -1,0 +1,53 @@
+# Investigation — Workflow Template
+# Triggered when you don't yet know what kind of task this is.
+# Acts as a triage funnel - early signal prompts you to re-log
+# as the right type once you understand the problem.
+
+id: investigation
+name: Investigation
+triggers:
+  - investigating
+  - looking into
+  - ci failures
+  - pipeline broken
+  - figuring out
+  - not sure why
+  - something broke
+  - checking why
+  - digging into
+  - spike
+  - spiking
+  - proof of concept
+  - poc
+  - exploring
+
+phases:
+  - name: Understand the symptoms
+    guidance: What's actually happening vs what should be? Gather evidence before theories.
+    colour: amber
+
+  - name: Narrow it down
+    guidance: Eliminate possibilities. What have you ruled out?
+    colour: teal
+
+  - name: Decide the next move
+    guidance: Fix it, escalate it, or log what you found. Don't leave it in your head.
+    colour: purple
+
+signals:
+  - condition: phase_duration > 8m AND current_phase == "symptoms"
+    prompt: >
+      Do you know what kind of task this is yet?
+      If so, re-log it as the right type.
+    actions: [re_log, still_investigating]
+
+  - condition: phase_duration > 45m AND current_phase == "narrow"
+    prompt: >
+      45 minutes narrowing down - do you have a theory yet,
+      or is this bigger than expected?
+    actions: [have_a_theory, bigger_than_expected]
+
+gates:
+  - before: complete
+    prompt: Have you written down what you found, even if it's not fixed yet?
+    actions: [not_yet, done]

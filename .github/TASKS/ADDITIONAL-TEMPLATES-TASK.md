@@ -1,10 +1,10 @@
-# Additional templates (bug, code review, spike)
+# DONE: Additional templates (bug, code review, spike)
 
 | Field        | Value                    |
 |-------------|--------------------------|
 | Phase       | P5: Polish               |
 | Priority    | Should have              |
-| Status      | Not started              |
+| Status      | Done                     |
 | Est. Effort | Medium (3-5h)            |
 | Dependencies| Template storage working |
 
@@ -16,3 +16,27 @@ Design and add templates for:
 - New feature spike
 
 Same principles: 3 phases max, signal-triggered coaching only.
+
+## Completion
+
+**Tested by:**
+- `python3 -c "import yaml; yaml.safe_load(open('templates/bug-investigation.yaml'))"` — OK
+- `python3 -c "import yaml; yaml.safe_load(open('templates/code-review.yaml'))"` — OK
+- `python3 -c "import yaml; yaml.safe_load(open('templates/investigation.yaml'))"` — OK
+- `cargo build --manifest-path src-tauri/Cargo.toml` — Finished in 0.77s, no errors
+- `ls templates/*.yaml` — 4 templates present (plus `_schema.yaml`)
+
+**Unexpected outcomes:**
+- None
+
+**Follow-up tasks:**
+- None
+
+**Confidence:** [10/10] — Files were created verbatim from the prompt spec and all three parse as valid YAML with a clean Rust build.
+
+**Files modified:**
+- `templates/bug-investigation.yaml`
+- `templates/code-review.yaml`
+- `templates/investigation.yaml`
+- `.github/TASKS/ADDITIONAL-TEMPLATES-TASK.md`
+

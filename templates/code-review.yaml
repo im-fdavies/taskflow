@@ -1,0 +1,37 @@
+# Code Review — Workflow Template
+# Triggered when reviewing someone else's pull request
+
+id: code-review
+name: Code review
+triggers:
+  - code review
+  - reviewing pr
+  - review pull request
+  - someone's pr
+  - peer review
+  - reviewing code
+
+phases:
+  - name: Understand the intent
+    guidance: Read the PR description and ticket first. What is this supposed to do?
+    colour: amber
+
+  - name: Read the diff
+    guidance: Structural changes first, then details. Does the approach make sense?
+    colour: teal
+
+  - name: Write your feedback
+    guidance: Be specific. What needs changing vs what's a suggestion?
+    colour: purple
+
+signals:
+  - condition: phase_duration > 40m AND current_phase == "read"
+    prompt: >
+      Long time in the diff - is this PR too big, or are you
+      getting pulled into implementation details?
+    actions: [on_track, too_big]
+
+gates:
+  - before: complete
+    prompt: Have you distinguished must-fix from nice-to-have in your comments?
+    actions: [not_yet, done]
