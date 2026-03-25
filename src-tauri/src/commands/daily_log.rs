@@ -1,4 +1,4 @@
-use crate::helpers::markdown::{find_section_byte_offset, daily_log_skeleton};
+use crate::helpers::markdown::{find_section_byte_offset, daily_log_skeleton, ensure_log_sections};
 use chrono::Local;
 
 #[tauri::command(rename_all = "camelCase")]
@@ -83,11 +83,12 @@ pub fn append_completion_log(
     let time_str = now.format("%H:%M").to_string();
     let log_path = logs_dir.join(format!("{}.md", date_str));
 
-    let mut content = if log_path.exists() {
+    let raw_content = if log_path.exists() {
         fs::read_to_string(&log_path).map_err(|e| format!("Failed to read log file: {}", e))?
     } else {
         daily_log_skeleton(&date_str)
     };
+    let mut content = ensure_log_sections(&raw_content, &date_str);
 
     let duration_str = match duration_minutes {
         Some(d) if d > 0 => {
@@ -108,10 +109,18 @@ pub fn append_completion_log(
         time_str, task_name, outcome_str, duration_str, pr_str, follow_str, handoff_str
     );
 
-    if !content.ends_with('\n') {
-        content.push('\n');
+    match find_section_byte_offset(&content, "Completed Work") {
+        Some(pos) => {
+            let after_heading = content[pos..].find('\n').map(|i| pos + i + 1).unwrap_or(content.len());
+            content.insert_str(after_heading, &entry);
+        }
+        None => {
+            if !content.ends_with('\n') {
+                content.push('\n');
+            }
+            content.push_str(&entry);
+        }
     }
-    content.push_str(&entry);
 
     fs::write(&log_path, content).map_err(|e| format!("Failed to write log file: {}", e))?;
 
