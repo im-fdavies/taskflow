@@ -355,6 +355,11 @@
   padding: 10px 0;
 }
 
+.jira-loading {
+  opacity: 0.6;
+  font-style: italic;
+}
+
 .dashboard-done-label {
   /* inherits .dashboard-section-label */
 }

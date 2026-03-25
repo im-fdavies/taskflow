@@ -624,7 +624,7 @@ class TaskFlowApp {
   }
 
   async refreshLeftPanel() {
-    await _refreshLeftPanel();
+    await _refreshLeftPanel(true);
   }
 
   // ---- Protocol: Listening → Completion (Mode 4) ----

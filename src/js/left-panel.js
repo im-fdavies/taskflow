@@ -5,8 +5,8 @@
 
 const { invoke } = window.__TAURI__.core;
 
-export async function refreshLeftPanel() {
-  await Promise.all([refreshPausedTasks(), refreshJiraTickets()]);
+export async function refreshLeftPanel(forceRefresh = false) {
+  await Promise.all([refreshPausedTasks(), refreshJiraTickets(forceRefresh)]);
 }
 
 async function refreshPausedTasks() {
@@ -59,12 +59,18 @@ async function refreshPausedTasks() {
   }
 }
 
-async function refreshJiraTickets() {
+async function refreshJiraTickets(forceRefresh = false) {
   const list = document.getElementById("dashboard-jira-list");
   if (!list) return;
 
   try {
-    const tickets = await invoke("read_jira_tickets");
+    if (forceRefresh) {
+      list.innerHTML = '<div class="dashboard-empty jira-loading">Syncing with Jira...</div>';
+    }
+
+    const command = forceRefresh ? "refresh_jira_cache" : "read_jira_tickets";
+    const tickets = await invoke(command);
+
     list.innerHTML = "";
     if (tickets.length === 0) {
       list.innerHTML = '<div class="dashboard-empty">No sprint tickets</div>';

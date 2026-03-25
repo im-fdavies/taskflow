@@ -79,6 +79,7 @@ pub fn run() {
             discard_todo_entry,
             read_paused_tasks,
             read_jira_tickets,
+            refresh_jira_cache,
         ])
         .setup(|app| {
             // Register the global shortcut
