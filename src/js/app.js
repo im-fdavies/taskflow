@@ -35,6 +35,11 @@ import {
   showEntryState as _showEntryState,
   renderPhases,
 } from './entry-flow.js';
+import {
+  refreshLeftPanel as _refreshLeftPanel,
+  resumeTask as _resumeTask,
+  leftPanelVoiceTap as _leftPanelVoiceTap,
+} from './left-panel.js';
 
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
@@ -96,6 +101,13 @@ class TaskFlowApp {
       onStateChange: () => {},
       onAmplitude: () => {},
       onError: (msg) => console.error('Dashboard voice error:', msg),
+    });
+
+    // Audio recording — LEFT PANEL state (context-switch)
+    this._leftPanelVoiceCapture = new VoiceCapture({
+      onStateChange: () => {},
+      onAmplitude: () => {},
+      onError: (msg) => console.error('Left panel voice error:', msg),
     });
 
     // P2a: template cache and current session
@@ -205,7 +217,7 @@ class TaskFlowApp {
     if (tauriWindow) {
       const appWindow = tauriWindow.getCurrentWindow();
       document.querySelectorAll('.state').forEach(el => {
-        if (el.id === 's-dashboard') return;
+        if (el.id === 's-dashboard' || el.id === 's-dashboard-left') return;
         el.addEventListener('mousedown', (e) => {
           // Only drag on the card background, not interactive elements
           const tag = e.target.tagName.toLowerCase();
@@ -326,15 +338,19 @@ class TaskFlowApp {
     if (this._exitVoiceCapture.isRecording()) await this._exitVoiceCapture.stop().catch(e => console.warn('[TF] exit voice stop:', e));
     if (this._exitBookmarkVoiceCapture.isRecording()) await this._exitBookmarkVoiceCapture.stop().catch(e => console.warn('[TF] bookmark voice stop:', e));
     if (this._dashboardVoiceCapture.isRecording()) await this._dashboardVoiceCapture.stop().catch(e => console.warn('[TF] dashboard voice stop:', e));
+    if (this._leftPanelVoiceCapture.isRecording()) await this._leftPanelVoiceCapture.stop().catch(e => console.warn('[TF] left panel voice stop:', e));
 
     const backdrop = document.getElementById("dashboard-backdrop");
+    const leftPanel = document.getElementById("s-dashboard-left");
     if (this.currentState === "dashboard") {
-      // Slide panel out, fade backdrop, then restore window and hide
+      // Slide panels out, fade backdrop, then restore window and hide
       const panel = document.getElementById("s-dashboard");
       if (panel) panel.style.transform = "translateX(100%)";
+      if (leftPanel) leftPanel.style.transform = "translateX(-110%)";
       if (backdrop) backdrop.classList.remove("visible");
       await new Promise(resolve => setTimeout(resolve, 300));
       if (panel) panel.style.transform = "";
+      if (leftPanel) { leftPanel.style.transform = ""; leftPanel.classList.remove("active"); }
       if (backdrop) backdrop.style.display = "none";
       await invoke("collapse_from_dashboard").catch(e => console.warn('[TF] collapse:', e));
     } else {
@@ -580,6 +596,9 @@ class TaskFlowApp {
 
   async showDashboard() {
     await _showDashboard((s) => this.show(s));
+    const leftPanel = document.getElementById("s-dashboard-left");
+    if (leftPanel) leftPanel.classList.add("active");
+    await _refreshLeftPanel();
   }
 
   _refreshDashboardTodos() {
@@ -592,6 +611,20 @@ class TaskFlowApp {
 
   async dismissTodoAdded() {
     await _dismissTodoAdded();
+  }
+
+  // ---- Left panel ----
+
+  async leftPanelVoiceTap() {
+    await _leftPanelVoiceTap(this._leftPanelVoiceCapture, this);
+  }
+
+  async resumeTask(taskName) {
+    await _resumeTask(taskName, () => this.close());
+  }
+
+  async refreshLeftPanel() {
+    await _refreshLeftPanel();
   }
 
   // ---- Protocol: Listening → Completion (Mode 4) ----

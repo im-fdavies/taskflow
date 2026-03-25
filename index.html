@@ -184,6 +184,33 @@
       <!-- Dashboard backdrop (frosted overlay, click to close) -->
       <div id="dashboard-backdrop" class="dashboard-backdrop"></div>
 
+      <!-- State: dashboard-left -->
+      <div id="s-dashboard-left" class="state dashboard-left-panel">
+        <div class="state-body">
+          <div class="dashboard-section-label">Context switch</div>
+          <div class="dashboard-voice-row">
+            <button class="dashboard-mic-btn-sm" id="dashboard-left-voice-btn" onclick="app.leftPanelVoiceTap()">🎤</button>
+            <span class="dashboard-mic-hint" id="dashboard-left-voice-hint">Tap to switch context</span>
+          </div>
+          <div class="dashboard-voice-status" id="dashboard-left-voice-status" style="display:none;"></div>
+
+          <div class="dashboard-section-label">Sprint tickets</div>
+          <div class="dashboard-empty" id="dashboard-jira-list">Jira not configured</div>
+
+          <div class="dashboard-section-label">Paused tasks</div>
+          <div class="dashboard-task-list" id="dashboard-task-list">
+            <div class="dashboard-empty">Loading…</div>
+          </div>
+
+          <div class="dashboard-section-label dashboard-done-label" id="dashboard-tasks-done-label" style="display:none;">Done</div>
+          <div class="dashboard-done-list" id="dashboard-tasks-done-list"></div>
+        </div>
+        <div class="footer">
+          <button class="btn" onclick="app.close()">Close</button>
+          <button class="btn" onclick="app.refreshLeftPanel()">↻ Refresh</button>
+        </div>
+      </div>
+
       <!-- State: dashboard -->
       <div id="s-dashboard" class="state">
         <div class="state-body">
