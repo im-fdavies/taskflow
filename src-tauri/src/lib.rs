@@ -5,6 +5,7 @@ use std::sync::Mutex;
 mod state;
 mod helpers;
 mod commands;
+mod tray;
 
 use state::{AppState, TaskState};
 use commands::*;
@@ -17,6 +18,10 @@ use commands::*;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![]),
+        ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
@@ -73,6 +78,7 @@ pub fn run() {
             complete_todo_entry,
             discard_todo_entry,
             read_paused_tasks,
+            read_jira_tickets,
         ])
         .setup(|app| {
             // Register the global shortcut
@@ -92,6 +98,8 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("overlay") {
                 let _ = window.hide();
             }
+
+            tray::setup_tray(app.handle())?;
 
             Ok(())
         })
