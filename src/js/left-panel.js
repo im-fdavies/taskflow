@@ -6,7 +6,7 @@
 const { invoke } = window.__TAURI__.core;
 
 export async function refreshLeftPanel() {
-  await refreshPausedTasks();
+  await Promise.all([refreshPausedTasks(), refreshJiraTickets()]);
 }
 
 async function refreshPausedTasks() {
@@ -56,6 +56,71 @@ async function refreshPausedTasks() {
     }
   } catch (e) {
     list.innerHTML = '<div class="dashboard-empty">Could not load tasks</div>';
+  }
+}
+
+async function refreshJiraTickets() {
+  const list = document.getElementById("dashboard-jira-list");
+  if (!list) return;
+
+  try {
+    const tickets = await invoke("read_jira_tickets");
+    list.innerHTML = "";
+    if (tickets.length === 0) {
+      list.innerHTML = '<div class="dashboard-empty">No sprint tickets</div>';
+      return;
+    }
+
+    for (const ticket of tickets) {
+      const div = document.createElement("div");
+      div.className = "jira-ticket-item";
+
+      const header = document.createElement("div");
+      header.className = "jira-ticket-header";
+
+      const key = document.createElement("span");
+      key.className = "jira-ticket-key";
+      key.textContent = ticket.key;
+
+      const statusBadge = document.createElement("span");
+      statusBadge.className = `jira-ticket-status jira-status-${ticket.statusCategory.toLowerCase().replace(/\s+/g, "-")}`;
+      statusBadge.textContent = ticket.status;
+
+      header.appendChild(key);
+      header.appendChild(statusBadge);
+      div.appendChild(header);
+
+      const summary = document.createElement("div");
+      summary.className = "jira-ticket-summary";
+      summary.textContent = ticket.summary;
+      div.appendChild(summary);
+
+      const metaRow = document.createElement("div");
+      metaRow.className = "jira-ticket-meta";
+
+      const typeEl = document.createElement("span");
+      typeEl.className = "jira-ticket-type";
+      typeEl.textContent = ticket.issueType;
+      metaRow.appendChild(typeEl);
+
+      if (ticket.parentKey) {
+        const parent = document.createElement("span");
+        parent.className = "jira-ticket-parent";
+        parent.textContent = ticket.parentKey;
+        metaRow.appendChild(parent);
+      }
+
+      div.appendChild(metaRow);
+
+      div.addEventListener("click", async () => {
+        await window.__TAURI__.shell.open(ticket.url);
+        window.app.close();
+      });
+
+      list.appendChild(div);
+    }
+  } catch (e) {
+    list.innerHTML = '<div class="dashboard-empty">Could not load tickets</div>';
   }
 }
 
