@@ -1,4 +1,5 @@
 use tauri::Manager;
+use tauri::Emitter;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use std::sync::Mutex;
 
@@ -25,18 +26,37 @@ pub fn run() {
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
-                    if event.state() == ShortcutState::Pressed {
-                        let ctrl_shift_space = Shortcut::new(
-                            Some(Modifiers::SUPER | Modifiers::SHIFT),
-                            Code::Space,
-                        );
-                        let ctrl_shift_d = Shortcut::new(
-                            Some(Modifiers::SUPER | Modifiers::SHIFT),
-                            Code::KeyD,
-                        );
-                        if shortcut == &ctrl_shift_space {
-                            commands::window::toggle_overlay(app);
-                        } else if shortcut == &ctrl_shift_d {
+                    let ctrl_shift_space = Shortcut::new(
+                        Some(Modifiers::SUPER | Modifiers::SHIFT),
+                        Code::Space,
+                    );
+                    let ctrl_shift_d = Shortcut::new(
+                        Some(Modifiers::SUPER | Modifiers::SHIFT),
+                        Code::KeyD,
+                    );
+
+                    if shortcut == &ctrl_shift_space {
+                        let state = app.state::<AppState>();
+                        match event.state() {
+                            ShortcutState::Pressed => {
+                                *state.shortcut_pressed_at.lock().unwrap() = Some(std::time::Instant::now());
+                                commands::window::open_overlay(app);
+                            }
+                            ShortcutState::Released => {
+                                let pressed_at = state.shortcut_pressed_at.lock().unwrap().take();
+                                if let Some(pressed_at) = pressed_at {
+                                    let held_ms = pressed_at.elapsed().as_millis();
+                                    if held_ms >= 300 {
+                                        if let Some(window) = app.get_webview_window("overlay") {
+                                            let _ = window.emit("shortcut-released", ());
+                                        }
+                                    }
+                                    // Short tap (<300ms) — Enter/Done flow handles stop
+                                }
+                            }
+                        }
+                    } else if shortcut == &ctrl_shift_d {
+                        if event.state() == ShortcutState::Pressed {
                             commands::window::toggle_dashboard(app);
                         }
                     }
@@ -46,6 +66,7 @@ pub fn run() {
         .manage(AppState {
             task: Mutex::new(TaskState::default()),
             ollama_available: Mutex::new(None),
+            shortcut_pressed_at: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             get_state,

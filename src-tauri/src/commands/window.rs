@@ -1,22 +1,23 @@
 use tauri::{AppHandle, Manager};
 use tauri::Emitter;
 
-pub(crate) fn toggle_overlay(app: &AppHandle) {
+pub(crate) fn open_overlay(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("overlay") {
+        // If already visible, don't re-emit (avoids restarting recording mid-flow)
         if window.is_visible().unwrap_or(false) {
-            let _ = window.hide();
-        } else {
-            // Ensure vibrancy is cleared (may linger from dashboard)
-            #[cfg(target_os = "macos")]
-            {
-                use window_vibrancy::clear_vibrancy;
-                let _ = clear_vibrancy(&window);
-            }
-            let _ = window.show();
-            let _ = window.set_focus();
-            // Tell the frontend we've opened
-            let _ = window.emit("overlay-opened", ());
+            return;
         }
+
+        // Ensure vibrancy is cleared (may linger from dashboard)
+        #[cfg(target_os = "macos")]
+        {
+            use window_vibrancy::clear_vibrancy;
+            let _ = clear_vibrancy(&window);
+        }
+        let _ = window.show();
+        let _ = window.set_focus();
+        // Tell the frontend we've opened
+        let _ = window.emit("overlay-opened", ());
     }
 }
 

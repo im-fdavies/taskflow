@@ -144,11 +144,35 @@ class TaskFlowApp {
       this._ollamaAvailable = false;
     }
 
+    // Track hold-to-record mode
+    this._holdMode = false;
+    this._holdTimer = null;
+
     // Listen for overlay open event from Rust
     await listen("overlay-opened", () => {
       this.show("listening");
       startWaveform("waveform", () => this._lastAmplitude);
       this.startRecording();
+
+      // Start a 300ms timer — if shortcut-released fires after this, it was a hold.
+      this._holdMode = false;
+      if (this._holdTimer) clearTimeout(this._holdTimer);
+      this._holdTimer = setTimeout(() => {
+        this._holdMode = true;
+        const hint = document.getElementById("listening-hint");
+        if (hint && this._voiceCapture.isRecording()) {
+          hint.textContent = "Release to finish";
+        }
+      }, 300);
+    });
+
+    // Listen for key release — stops recording if user was holding
+    await listen("shortcut-released", () => {
+      if (this._holdMode && this._voiceCapture.isRecording()) {
+        this.stopRecording();
+      }
+      this._holdMode = false;
+      if (this._holdTimer) { clearTimeout(this._holdTimer); this._holdTimer = null; }
     });
 
     // Listen for dashboard open event from Rust (Cmd+Shift+D)
@@ -334,6 +358,9 @@ class TaskFlowApp {
 
   async close() {
     if (this._urgentTimer) { clearTimeout(this._urgentTimer); this._urgentTimer = null; }
+    // Reset hold mode
+    this._holdMode = false;
+    if (this._holdTimer) { clearTimeout(this._holdTimer); this._holdTimer = null; }
     if (this._voiceCapture.isRecording()) await this._voiceCapture.stop().catch(e => console.warn('[TF] voice stop:', e));
     if (this._exitVoiceCapture.isRecording()) await this._exitVoiceCapture.stop().catch(e => console.warn('[TF] exit voice stop:', e));
     if (this._exitBookmarkVoiceCapture.isRecording()) await this._exitBookmarkVoiceCapture.stop().catch(e => console.warn('[TF] bookmark voice stop:', e));
@@ -797,6 +824,9 @@ class TaskFlowApp {
   startAgain() {
     // Clear urgent timer if running
     if (this._urgentTimer) { clearTimeout(this._urgentTimer); this._urgentTimer = null; }
+    // Reset hold mode — go back to tap flow
+    this._holdMode = false;
+    if (this._holdTimer) { clearTimeout(this._holdTimer); this._holdTimer = null; }
     // Swap back to recording sub-state
     const recording = document.getElementById("listening-recording");
     const confirmed = document.getElementById("listening-confirmed");

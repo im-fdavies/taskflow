@@ -23,4 +23,6 @@ pub struct AppState {
     // Cached after the first check; Ollama availability won't change mid-session.
     // If the user starts Ollama after launching the app, they must restart.
     pub ollama_available: Mutex<Option<bool>>,
+    // Tracks when Cmd+Shift+Space was pressed to measure hold duration.
+    pub shortcut_pressed_at: Mutex<Option<std::time::Instant>>,
 }
