@@ -52,7 +52,13 @@ export async function refreshDashboardTodos() {
 
         const text = document.createElement("span");
         text.className = "dashboard-todo-text";
-        text.textContent = todo;
+        text.textContent = todo.name;
+        if (todo.priority) {
+          const badge = document.createElement("span");
+          badge.className = `dashboard-priority-badge priority-${todo.priority.toLowerCase()}`;
+          badge.textContent = todo.priority;
+          text.appendChild(badge);
+        }
 
         const actions = document.createElement("span");
         actions.className = "dashboard-todo-actions";
@@ -61,13 +67,13 @@ export async function refreshDashboardTodos() {
         doneBtn.className = "dashboard-todo-action-btn done";
         doneBtn.textContent = "✓";
         doneBtn.title = "Mark done";
-        doneBtn.onclick = () => completeTodo(todo, div);
+        doneBtn.onclick = () => completeTodo(todo.name, div);
 
         const discardBtn = document.createElement("button");
         discardBtn.className = "dashboard-todo-action-btn discard";
         discardBtn.textContent = "✕";
         discardBtn.title = "Discard";
-        discardBtn.onclick = () => discardTodo(todo, div);
+        discardBtn.onclick = () => discardTodo(todo.name, div);
 
         actions.appendChild(doneBtn);
         actions.appendChild(discardBtn);
@@ -202,11 +208,15 @@ export async function dismissTodoAdded() {
 
   if (editInput && _lastAddedTodo) {
     const newText = editInput.value.trim();
-    if (newText && newText !== _lastAddedTodo) {
+    const activePriority = document.querySelector('#dashboard-todo-priority .dashboard-pill.active');
+    const priority = activePriority ? activePriority.dataset.value : null;
+
+    if (newText && (newText !== _lastAddedTodo || priority)) {
       try {
         await invoke("update_todo_entry", {
           oldName: _lastAddedTodo,
           newName: newText,
+          priority,
         });
         await refreshDashboardTodos();
       } catch (e) {

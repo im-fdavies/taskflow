@@ -94,8 +94,15 @@ pub fn read_paused_tasks() -> Vec<PausedTask> {
     tasks
 }
 
+#[derive(Serialize, Clone)]
+pub struct TodoItem {
+    pub time: String,
+    pub name: String,
+    pub priority: Option<String>,
+}
+
 #[tauri::command(rename_all = "camelCase")]
-pub fn read_daily_todos() -> Vec<String> {
+pub fn read_daily_todos() -> Vec<TodoItem> {
     let home = match dirs::home_dir() {
         Some(h) => h,
         None => return vec![],
@@ -117,8 +124,22 @@ pub fn read_daily_todos() -> Vec<String> {
 
     extract_section(&content, "Todos")
         .lines()
-        .filter(|l| l.starts_with("### "))
-        .map(|l| l.trim_start_matches("### ").to_string())
+        .filter_map(|l| {
+            if !l.starts_with("### ") { return None; }
+            let rest = l.trim_start_matches("### ");
+            let (time, remainder) = rest.split_once(" - ")?;
+            let (name, priority) = if let Some(bracket_start) = remainder.rfind(" [") {
+                if remainder.ends_with(']') {
+                    let prio = &remainder[bracket_start + 2..remainder.len() - 1];
+                    (&remainder[..bracket_start], Some(prio.to_string()))
+                } else {
+                    (remainder, None)
+                }
+            } else {
+                (remainder, None)
+            };
+            Some(TodoItem { time: time.to_string(), name: name.to_string(), priority })
+        })
         .collect()
 }
 
@@ -138,7 +159,7 @@ pub fn read_daily_summary() -> Option<String> {
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub fn append_todo_entry(task_name: String) -> Result<(), String> {
+pub fn append_todo_entry(task_name: String, priority: Option<String>) -> Result<(), String> {
     use std::fs;
 
     let home = dirs::home_dir().ok_or("Could not find home directory")?;
@@ -159,7 +180,10 @@ pub fn append_todo_entry(task_name: String) -> Result<(), String> {
     // Ensure v2 sections exist (handles legacy log files)
     let content = ensure_log_sections(&raw_content, &date_str);
 
-    let entry = format!("### {} - {}\n\n", time_str, task_name);
+    let entry = match priority.as_deref() {
+        Some(p) if !p.is_empty() => format!("### {} - {} [{}]\n\n", time_str, task_name, p),
+        _ => format!("### {} - {}\n\n", time_str, task_name),
+    };
 
     // Insert before ## Completed Work (which is right after ## Todos section)
     let new_content = match find_section_byte_offset(&content, "Completed Work") {
@@ -173,7 +197,7 @@ pub fn append_todo_entry(task_name: String) -> Result<(), String> {
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub fn update_todo_entry(old_name: String, new_name: String) -> Result<(), String> {
+pub fn update_todo_entry(old_name: String, new_name: String, priority: Option<String>) -> Result<(), String> {
     use std::fs;
 
     let home = dirs::home_dir().ok_or("Could not find home directory")?;
@@ -189,11 +213,20 @@ pub fn update_todo_entry(old_name: String, new_name: String) -> Result<(), Strin
 
     // Find the line containing the old todo name and replace it
     let old_suffix = format!(" - {}", old_name);
-    let new_suffix = format!(" - {}", new_name);
+    let new_name_str = match priority.as_deref() {
+        Some(p) if !p.is_empty() => format!("{} [{}]", new_name, p),
+        _ => new_name.clone(),
+    };
+    let new_suffix = format!(" - {}", new_name_str);
     let new_content = content.lines()
         .map(|line| {
-            if line.starts_with("### ") && line.ends_with(&old_suffix) {
-                line.replace(&old_suffix, &new_suffix)
+            if line.starts_with("### ") && (line.ends_with(&old_suffix) || line.contains(&format!("{} [", old_name))) {
+                // Extract the time prefix and rebuild with new name
+                if let Some(dash_pos) = line[4..].find(" - ") {
+                    format!("{}{}", &line[..4 + dash_pos], new_suffix)
+                } else {
+                    line.replace(&old_suffix, &new_suffix)
+                }
             } else {
                 line.to_string()
             }
@@ -226,11 +259,13 @@ pub fn complete_todo_entry(todo_text: String) -> Result<(), String> {
     let content = ensure_log_sections(&raw_content, &date_str);
 
     // Find and remove the matching ### line from Todos
+    // Match by name - line may end with [Priority] tag so check both patterns
     let search = format!(" - {}", todo_text);
     let mut removed_line: Option<String> = None;
     let lines: Vec<String> = content.lines()
         .filter(|line| {
-            if removed_line.is_none() && line.starts_with("### ") && line.ends_with(&search) {
+            if removed_line.is_none() && line.starts_with("### ") &&
+               (line.ends_with(&search) || line.contains(&format!("{} [", todo_text))) {
                 removed_line = Some(line.to_string());
                 false
             } else {
@@ -316,7 +351,7 @@ pub fn discard_todo_entry(todo_text: String) -> Result<(), String> {
 
     let search = format!(" - {}", todo_text);
     let new_content = content.lines()
-        .filter(|line| !(line.starts_with("### ") && line.ends_with(&search)))
+        .filter(|line| !(line.starts_with("### ") && (line.ends_with(&search) || line.contains(&format!("{} [", todo_text)))))
         .collect::<Vec<_>>()
         .join("\n");
 

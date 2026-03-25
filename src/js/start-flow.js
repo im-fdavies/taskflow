@@ -27,7 +27,7 @@ export async function findExistingTask(taskName) {
   }
 
   // Check todos
-  const todoObjects = todos.map(name => ({ name }));
+  const todoObjects = todos.map(t => ({ name: t.name }));
   const todoResult = fuzzyMatchTask(taskName, todoObjects);
   if (todoResult) {
     return { type: "todo", ...todoResult };
