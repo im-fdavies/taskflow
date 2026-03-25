@@ -430,10 +430,10 @@ class TaskFlowApp {
       if (hint) hint.textContent = "Speak, then press Enter";
       // Stop any exit voice captures in progress
       if (this._exitVoiceCapture && this._exitVoiceCapture.isRecording()) {
-        this._exitVoiceCapture.stop().catch(() => {});
+        this._exitVoiceCapture.stop().catch(e => console.warn('[TF] exit voice stop:', e));
       }
       if (this._exitBookmarkVoiceCapture && this._exitBookmarkVoiceCapture.isRecording()) {
-        this._exitBookmarkVoiceCapture.stop().catch(() => {});
+        this._exitBookmarkVoiceCapture.stop().catch(e => console.warn('[TF] bookmark voice stop:', e));
       }
       // Reset exit interview nudge
       const exitNudge = document.getElementById('exit-question-nudge');
@@ -453,10 +453,10 @@ class TaskFlowApp {
 
   async close() {
     if (this._urgentTimer) { clearTimeout(this._urgentTimer); this._urgentTimer = null; }
-    if (this._voiceCapture.isRecording()) await this._voiceCapture.stop().catch(() => {});
-    if (this._exitVoiceCapture.isRecording()) await this._exitVoiceCapture.stop().catch(() => {});
-    if (this._exitBookmarkVoiceCapture.isRecording()) await this._exitBookmarkVoiceCapture.stop().catch(() => {});
-    if (this._dashboardVoiceCapture.isRecording()) await this._dashboardVoiceCapture.stop().catch(() => {});
+    if (this._voiceCapture.isRecording()) await this._voiceCapture.stop().catch(e => console.warn('[TF] voice stop:', e));
+    if (this._exitVoiceCapture.isRecording()) await this._exitVoiceCapture.stop().catch(e => console.warn('[TF] exit voice stop:', e));
+    if (this._exitBookmarkVoiceCapture.isRecording()) await this._exitBookmarkVoiceCapture.stop().catch(e => console.warn('[TF] bookmark voice stop:', e));
+    if (this._dashboardVoiceCapture.isRecording()) await this._dashboardVoiceCapture.stop().catch(e => console.warn('[TF] dashboard voice stop:', e));
 
     const backdrop = document.getElementById("dashboard-backdrop");
     if (this.currentState === "dashboard") {
@@ -467,7 +467,7 @@ class TaskFlowApp {
       await new Promise(resolve => setTimeout(resolve, 300));
       if (panel) panel.style.transform = "";
       if (backdrop) backdrop.style.display = "none";
-      await invoke("collapse_from_dashboard").catch(() => {});
+      await invoke("collapse_from_dashboard").catch(e => console.warn('[TF] collapse:', e));
     } else {
       if (backdrop) { backdrop.classList.remove("visible"); backdrop.style.display = "none"; }
     }
@@ -736,7 +736,7 @@ class TaskFlowApp {
 
   async showDashboard() {
     // Expand window to full screen height before showing panel
-    await invoke("expand_for_dashboard").catch(() => {});
+    await invoke("expand_for_dashboard").catch(e => console.warn('[TF] expand:', e));
 
     // Show frosted backdrop with opacity transition
     const backdrop = document.getElementById("dashboard-backdrop");
@@ -1268,7 +1268,7 @@ class TaskFlowApp {
     if (mode === 3) {
       // Urgent — minimal entry, no template
       if (entryLabel) entryLabel.textContent = "Entry · Urgent";
-      if (entryTaskName) entryTaskName.textContent = taskName || this._session.transcription;
+      if (entryTaskName) entryTaskName.textContent = taskName || this.transcription;
       if (templateBadge) {
         templateBadge.textContent = "Urgent";
         templateBadge.className = "badge badge-mode3";
@@ -1281,7 +1281,7 @@ class TaskFlowApp {
         phasesContainer.appendChild(div);
       }
 
-      this.pendingTask = taskName || this._session.transcription;
+      this.pendingTask = taskName || this.transcription;
       this.show("entry");
       return;
     }
@@ -1309,7 +1309,7 @@ class TaskFlowApp {
     } else {
       // No template match — generic entry
       if (entryLabel) entryLabel.textContent = "Entry";
-      if (entryTaskName) entryTaskName.textContent = taskName || this._session.transcription;
+      if (entryTaskName) entryTaskName.textContent = taskName || this.transcription;
       if (templateBadge) {
         templateBadge.textContent = "No template";
         templateBadge.className = "badge";
@@ -1334,7 +1334,7 @@ class TaskFlowApp {
         phasesContainer.appendChild(div);
       }
 
-      this.pendingTask = taskName || this._session.transcription;
+      this.pendingTask = taskName || this.transcription;
     }
 
     this.show("entry");

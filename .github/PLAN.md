@@ -185,15 +185,17 @@ src/
 
 **Safe commit point:** After each module extraction. Test by opening app and running through the flow.
 
-### Phase 4 — Code Quality Fixes (Low Risk)
+### Phase 4 — Code Quality Fixes (Low Risk) ✅ DONE
+
+> Completed 2026-03-25. 4 of 6 items done; 2 deferred to follow-up (API helper + log path helper are better done during Phase 3 JS split).
 
 **Steps:**
-1. Replace 7 `.unwrap()` with `.expect("context")` or proper error handling in Rust
-2. Extract shared Claude API helper in Rust (deduplicate `generate_clarification_questions` / `generate_exit_question`)
-3. Extract log path helper (deduplicate 6 path constructions)
-4. Consolidate `this.transcription` / `this._session.transcription` to single source of truth
-5. Replace `.catch(() => {})` with `.catch(e => console.warn(...))` for debuggability
-6. Remove unused `pulldown-cmark-to-cmark` dependency
+1. ✅ Replace 7 `.unwrap()` with `.expect("context")` in Rust — all 7 replaced, zero `.unwrap()` remaining
+2. ⏭️ Extract shared Claude API helper — deferred (more effective after JS split exposes usage patterns)
+3. ⏭️ Extract log path helper — deferred (already cleaner after module split; each command file has its own scope)
+4. ✅ Consolidate `this.transcription` / `this._session.transcription` — 4 reads changed to use `this.transcription` directly
+5. ✅ Replace 8× `.catch(() => {})` with `.catch(e => console.warn(...))` for debuggability
+6. ✅ Remove unused `pulldown-cmark-to-cmark` dependency from Cargo.toml
 
 ---
 

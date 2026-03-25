@@ -23,7 +23,7 @@ pub fn transcribe_audio(wav_data: Vec<u8>) -> Result<String, String> {
     // Spawn whisper-cli
     let output = Command::new(&whisper_bin)
     .args([
-        "-m", model_path.to_str().unwrap(),
+        "-m", model_path.to_str().expect("model path is not valid UTF-8"),
         "-f", tmp_path,
         "--no-timestamps",
         "--beam-size", "8",

@@ -210,7 +210,7 @@ pub async fn check_ollama(state: tauri::State<'_, AppState>) -> Result<bool, Str
     use std::time::Duration;
 
     {
-        let cached = state.ollama_available.lock().unwrap();
+        let cached = state.ollama_available.lock().expect("ollama cache lock poisoned");
         if let Some(available) = *cached {
             return Ok(available);
         }
@@ -229,7 +229,7 @@ pub async fn check_ollama(state: tauri::State<'_, AppState>) -> Result<bool, Str
         }
     };
 
-    *state.ollama_available.lock().unwrap() = Some(available);
+    *state.ollama_available.lock().expect("ollama cache lock poisoned") = Some(available);
     Ok(available)
 }
 
