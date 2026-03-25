@@ -61,7 +61,7 @@ export async function refreshDashboardTodos() {
         doneBtn.className = "dashboard-todo-action-btn done";
         doneBtn.textContent = "✓";
         doneBtn.title = "Mark done";
-        doneBtn.onclick = () => completeTodo(todo);
+        doneBtn.onclick = () => completeTodo(todo, div);
 
         const discardBtn = document.createElement("button");
         discardBtn.className = "dashboard-todo-action-btn discard";
@@ -79,6 +79,8 @@ export async function refreshDashboardTodos() {
   } catch (e) {
     list.innerHTML = '<div class="dashboard-empty">Could not load todos</div>';
   }
+
+  await refreshDoneTodos();
 }
 
 /**
@@ -129,11 +131,40 @@ export async function dashboardVoiceTap(voiceCapture) {
   }
 }
 
-async function completeTodo(todoText) {
+async function refreshDoneTodos() {
+  const list = document.getElementById("dashboard-done-list");
+  const label = document.getElementById("dashboard-done-label");
+  if (!list) return;
+
   try {
+    const completed = await invoke("read_completed_todos");
+    list.innerHTML = "";
+    if (completed.length > 0) {
+      if (label) label.style.display = "";
+      for (const name of completed) {
+        const div = document.createElement("div");
+        div.className = "dashboard-done-item";
+        div.textContent = name;
+        list.appendChild(div);
+      }
+    } else {
+      if (label) label.style.display = "none";
+    }
+  } catch (e) {
+    if (label) label.style.display = "none";
+    list.innerHTML = "";
+  }
+}
+
+async function completeTodo(todoText, element) {
+  try {
+    if (element) element.classList.add("completing");
     await invoke("complete_todo_entry", { todoText });
+    // Brief delay for the fade-out animation to be visible
+    await new Promise(r => setTimeout(r, 250));
     await refreshDashboardTodos();
   } catch (e) {
+    if (element) element.classList.remove("completing");
     console.error("[TaskFlow] Failed to complete todo:", e);
   }
 }

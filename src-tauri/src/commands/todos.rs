@@ -1,5 +1,98 @@
 use crate::helpers::markdown::{find_section_byte_offset, daily_log_skeleton, ensure_log_sections, extract_section};
 use chrono::Local;
+use serde::Serialize;
+
+#[derive(Serialize, Clone)]
+pub struct PausedTask {
+    pub name: String,
+    pub bookmark: Option<String>,
+    pub exit_notes: Option<String>,
+    pub time: String,
+}
+
+/// Read tasks that were context-switched away from today (have exit metadata).
+/// Used by the "start task" flow to detect if the user is resuming a paused task.
+#[tauri::command(rename_all = "camelCase")]
+pub fn read_paused_tasks() -> Vec<PausedTask> {
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => return vec![],
+    };
+    let date_str = Local::now().format("%Y-%m-%d").to_string();
+    let log_path = home.join(".taskflow/logs").join(format!("{}.md", date_str));
+
+    if !log_path.exists() {
+        return vec![];
+    }
+
+    let content = match std::fs::read_to_string(&log_path) {
+        Ok(c) => c,
+        Err(_) => return vec![],
+    };
+
+    let mut tasks: Vec<PausedTask> = Vec::new();
+    let mut current_entry: Option<(String, String)> = None;
+    let mut current_bookmark: Option<String> = None;
+    let mut current_exit_notes: Option<String> = None;
+    let mut has_switch_metadata = false;
+
+    for line in content.lines() {
+        if line.starts_with("### ") {
+            // Save previous entry if it had switch metadata
+            if let Some((time, name)) = current_entry.take() {
+                if has_switch_metadata {
+                    tasks.push(PausedTask {
+                        name,
+                        bookmark: current_bookmark.take(),
+                        exit_notes: current_exit_notes.take(),
+                        time,
+                    });
+                }
+            }
+            current_bookmark = None;
+            current_exit_notes = None;
+            has_switch_metadata = false;
+
+            let rest = &line[4..];
+            if let Some(dash_pos) = rest.find(" - ") {
+                let time = rest[..dash_pos].trim().to_string();
+                let name = rest[dash_pos + 3..].trim().to_string();
+                // Skip COMPLETED entries
+                if !name.starts_with("COMPLETED:") {
+                    current_entry = Some((time, name));
+                }
+            }
+        } else if current_entry.is_some() {
+            if line.starts_with("- **Switch:**") {
+                has_switch_metadata = true;
+            } else if line.starts_with("- **Bookmark:**") {
+                let val = line.trim_start_matches("- **Bookmark:**").trim();
+                if val != "\u{2014}" && !val.is_empty() {
+                    current_bookmark = Some(val.to_string());
+                }
+            } else if line.starts_with("- **Exit notes:**") {
+                let val = line.trim_start_matches("- **Exit notes:**").trim();
+                if val != "\u{2014}" && !val.is_empty() {
+                    current_exit_notes = Some(val.to_string());
+                }
+            }
+        }
+    }
+
+    // Don't forget the last entry
+    if let Some((time, name)) = current_entry {
+        if has_switch_metadata {
+            tasks.push(PausedTask {
+                name,
+                bookmark: current_bookmark,
+                exit_notes: current_exit_notes,
+                time,
+            });
+        }
+    }
+
+    tasks
+}
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn read_daily_todos() -> Vec<String> {
@@ -166,6 +259,42 @@ pub fn complete_todo_entry(todo_text: String) -> Result<(), String> {
 
     fs::write(&log_path, new_content).map_err(|e| format!("Failed to write log: {}", e))?;
     Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn read_completed_todos() -> Vec<String> {
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => return vec![],
+    };
+    let date_str = Local::now().format("%Y-%m-%d").to_string();
+    let log_path = home.join(".taskflow/logs").join(format!("{}.md", date_str));
+
+    if !log_path.exists() {
+        return vec![];
+    }
+
+    let raw_content = match std::fs::read_to_string(&log_path) {
+        Ok(c) => c,
+        Err(_) => return vec![],
+    };
+
+    let content = ensure_log_sections(&raw_content, &date_str);
+
+    extract_section(&content, "Completed Work")
+        .lines()
+        .filter_map(|l| {
+            if l.starts_with("### ") {
+                if let Some(pos) = l.find("COMPLETED:") {
+                    let name = l[pos + "COMPLETED:".len()..].trim();
+                    if !name.is_empty() {
+                        return Some(name.to_string());
+                    }
+                }
+            }
+            None
+        })
+        .collect()
 }
 
 /// Remove a todo entirely from the log

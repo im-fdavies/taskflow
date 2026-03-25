@@ -306,3 +306,23 @@
 .dashboard-done-list {
   /* inherits defaults */
 }
+
+.dashboard-done-item {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.3);
+  text-decoration: line-through;
+  padding: 8px 0;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.04);
+  animation: fadeSlideIn 0.3s ease;
+}
+
+.dashboard-todo-item.completing {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}

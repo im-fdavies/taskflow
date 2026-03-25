@@ -56,6 +56,7 @@ pub fn run() {
             read_agent_context,
             read_completion_context,
             read_daily_todos,
+            read_completed_todos,
             read_daily_summary,
             append_todo_entry,
             check_ollama,
@@ -71,6 +72,7 @@ pub fn run() {
             update_todo_entry,
             complete_todo_entry,
             discard_todo_entry,
+            read_paused_tasks,
         ])
         .setup(|app| {
             // Register the global shortcut
