@@ -52,8 +52,12 @@ pub fn append_daily_log(
         time_str, task_name, mode_label, task_type_str, duration_str, exit_str, bookmark_str
     );
 
-    // Insert before "## Completed Work"; fall back to append if section not found.
-    let new_content = match find_section_byte_offset(&content, "Completed Work") {
+    // Insert before "## Todos" so entries live in the Summary section,
+    // not inside Todos (which would contaminate read_daily_todos).
+    // Fall back to before "## Completed Work", then append.
+    let insert_pos = find_section_byte_offset(&content, "Todos")
+        .or_else(|| find_section_byte_offset(&content, "Completed Work"));
+    let new_content = match insert_pos {
         Some(pos) => format!("{}{}{}", &content[..pos], entry, &content[pos..]),
         None => format!("{}{}", content, entry),
     };

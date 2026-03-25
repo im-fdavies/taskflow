@@ -25,7 +25,7 @@ export async function showTransitionState(session, callbacks) {
       if (durationMinutes < 0) durationMinutes = null;
     }
     invoke("append_daily_log", {
-      taskName: taskName || "Unknown",
+      taskName: previousState.current_task || "Unknown",
       taskType: session.template?.name || null,
       exitCapture: exitCapture || "",
       bookmark: session.extractedBookmark || null,

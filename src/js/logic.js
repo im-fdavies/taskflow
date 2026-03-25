@@ -79,6 +79,7 @@ const MARKERS = [
 
   // Entry markers (what user is switching TO)
   { re: /\bi(?:'m| am) (?:switching to|moving (?:on )?to|going to)\s+/i, type: "entry" },
+  { re: /\bi(?:'m| am) switching \w+ to\s+/i, type: "entry" },
   { re: /\b(?:switching to|moving on to|moving to)\s+/i, type: "entry" },
   { re: /\bneed to (?:switch to|do|work on|handle|look at)\s+/i, type: "entry" },
   { re: /\bi (?:need|want|have) to\s+/i, type: "entry" },
