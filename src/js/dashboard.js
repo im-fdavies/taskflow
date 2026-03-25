@@ -176,29 +176,15 @@ async function completeTodo(todoText, element) {
 }
 
 async function discardTodo(todoText, element) {
-  if (element.dataset.confirming) {
-    try {
-      await invoke("discard_todo_entry", { todoText });
-      await refreshDashboardTodos();
-    } catch (e) {
-      console.error("[TaskFlow] Failed to discard todo:", e);
-    }
-    return;
+  try {
+    if (element) element.classList.add("completing");
+    await invoke("discard_todo_entry", { todoText });
+    await new Promise(r => setTimeout(r, 250));
+    await refreshDashboardTodos();
+  } catch (e) {
+    if (element) element.classList.remove("completing");
+    console.error("[TaskFlow] Failed to discard todo:", e);
   }
-
-  element.dataset.confirming = "true";
-  element.classList.add("confirming-discard");
-  const text = element.querySelector(".dashboard-todo-text");
-  const originalText = text.textContent;
-  text.textContent = "Discard this todo?";
-
-  setTimeout(() => {
-    if (element.dataset.confirming) {
-      delete element.dataset.confirming;
-      element.classList.remove("confirming-discard");
-      text.textContent = originalText;
-    }
-  }, 3000);
 }
 
 export async function dismissTodoAdded() {
