@@ -29,6 +29,11 @@ import {
   updateExitMicBtn,
   toggleExitVoice,
 } from './exit-flow.js';
+import {
+  showTransitionState as _showTransitionState,
+  showEntryState as _showEntryState,
+  renderPhases,
+} from './entry-flow.js';
 
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
@@ -558,72 +563,10 @@ class TaskFlowApp {
   // ---- Protocol: Exit → Transition ----
 
   async showTransitionState() {
-    const { mode, exitCapture, taskName } = this._session;
-
-    // Fire-and-forget: log this context switch before any early returns
-    try {
-      const previousState = await invoke("get_state");
-      const startTime = previousState.task_started_at;
-      let durationMinutes = null;
-      if (startTime) {
-        const [h, m] = startTime.split(':').map(Number);
-        const now = new Date();
-        durationMinutes = Math.round((now.getHours() * 60 + now.getMinutes()) - (h * 60 + m));
-        if (durationMinutes < 0) durationMinutes = null;
-      }
-      invoke("append_daily_log", {
-        taskName: taskName || "Unknown",
-        taskType: this._session.template?.name || null,
-        exitCapture: exitCapture || "",
-        bookmark: this._session.extractedBookmark || null,
-        mode: mode,
-        durationMinutes: durationMinutes,
-      });
-    } catch (e) {
-      console.warn("[TaskFlow] Failed to log context switch:", e);
-    }
-
-    const prompt = document.getElementById("transition-prompt");
-    const bookmark = document.getElementById("transition-bookmark");
-    const bookmarkContent = document.getElementById("bookmark-content");
-    const autoMsg = document.getElementById("transition-auto-msg");
-    const confirmBtn = document.getElementById("transition-confirm-btn");
-    const footerText = document.getElementById("transition-footer-text");
-
-    if (mode === 3) {
-      // Mode 3: skip transition entirely, go straight to entry
-      this.showEntryState();
-      return;
-    }
-
-    if (mode === 2) {
-      // Mode 2: brief visual boundary, auto-advance after 1.5s
-      if (prompt) prompt.textContent = "Context boundary set.";
-      if (bookmark) bookmark.style.display = "none";
-      if (autoMsg) {
-        autoMsg.textContent = `Moving to: ${taskName}`;
-        autoMsg.style.display = "block";
-        autoMsg.classList.add("transition-auto-advancing");
-      }
-      if (confirmBtn) confirmBtn.style.display = "none";
-      if (footerText) footerText.textContent = "Auto-advancing…";
-
-      this.show("transition");
-      setTimeout(() => this.showEntryState(), 1500);
-      return;
-    }
-
-    // Mode 1: show exit capture summary, manual confirm
-    if (prompt) prompt.textContent = "Context saved.";
-    if (bookmark) bookmark.style.display = "block";
-    if (bookmarkContent) {
-      bookmarkContent.textContent = exitCapture || "—";
-    }
-    if (autoMsg) autoMsg.style.display = "none";
-    if (confirmBtn) { confirmBtn.style.display = "inline-flex"; confirmBtn.textContent = "Confirmed"; }
-    if (footerText) footerText.textContent = "Saved to daily log";
-
-    this.show("transition");
+    await _showTransitionState(this._session, {
+      showState: (s) => this.show(s),
+      showEntryState: () => this.showEntryState(),
+    });
   }
 
   confirmTransition() {
@@ -633,172 +576,7 @@ class TaskFlowApp {
   // ---- Protocol: Transition → Entry ----
 
   showEntryState() {
-    const { mode, template, taskName } = this._session;
-
-    const entryLabel = document.getElementById("entry-label");
-    const entryTaskName = document.getElementById("entry-task-name");
-    const modeNote = document.getElementById("entry-mode-note");
-    const templateBadge = document.getElementById("template-badge");
-    const phasesContainer = document.getElementById("template-phases");
-
-    // Clear previous phases
-    if (phasesContainer) phasesContainer.innerHTML = "";
-    if (modeNote) { modeNote.style.display = "none"; modeNote.textContent = ""; }
-
-    if (mode === 3) {
-      // Urgent — minimal entry, no template
-      if (entryLabel) entryLabel.textContent = "Entry · Urgent";
-      if (entryTaskName) entryTaskName.textContent = taskName || this.transcription;
-      if (templateBadge) {
-        templateBadge.textContent = "Urgent";
-        templateBadge.className = "badge badge-mode3";
-      }
-
-      if (phasesContainer) {
-        const div = document.createElement("div");
-        div.className = "urgent-entry";
-        div.textContent = `Captured. Focus on ${taskName}. System will check back later.`;
-        phasesContainer.appendChild(div);
-      }
-
-      this.pendingTask = taskName || this.transcription;
-      this.show("entry");
-      return;
-    }
-
-    if (template) {
-      // Render template phases
-      if (entryLabel) {
-        entryLabel.textContent = mode === 2
-          ? `Entry · ${template.name} (light)`
-          : `Entry · ${template.name}`;
-      }
-      if (entryTaskName) entryTaskName.textContent = template.name;
-      if (templateBadge) {
-        templateBadge.textContent = template.name;
-        templateBadge.className = "badge";
-      }
-
-      if (mode === 2 && modeNote) {
-        modeNote.textContent = "Quick entry — template for reference.";
-        modeNote.style.display = "block";
-      }
-
-      this._renderPhases(template, phasesContainer);
-      this.pendingTask = template.name;
-    } else {
-      // No template match — generic entry
-      if (entryLabel) entryLabel.textContent = "Entry";
-      if (entryTaskName) entryTaskName.textContent = taskName || this.transcription;
-      if (templateBadge) {
-        templateBadge.textContent = "No template";
-        templateBadge.className = "badge";
-      }
-
-      if (mode === 2 && modeNote) {
-        modeNote.textContent = "Quick entry — no template matched.";
-        modeNote.style.display = "block";
-      }
-
-      // Show a generic starting message
-      if (phasesContainer) {
-        const div = document.createElement("div");
-        div.className = "phase";
-        div.innerHTML = `
-          <div class="phase-dot teal">→</div>
-          <div>
-            <div class="phase-text">Starting: ${taskName}</div>
-            <div class="phase-sub">No template matched — working without structure.</div>
-          </div>
-        `;
-        phasesContainer.appendChild(div);
-      }
-
-      this.pendingTask = taskName || this.transcription;
-    }
-
-    this.show("entry");
-    this._fetchClarificationQuestions();
-  }
-
-  async _fetchClarificationQuestions() {
-    const { mode, template, transcription, exitCapture } = this._session;
-    const container = document.getElementById('clarification-questions');
-    if (!container) return;
-
-    // Reset
-    container.style.display = 'none';
-    container.innerHTML = '';
-
-    // Mode 3 never gets questions
-    if (mode === 3) return;
-
-    // Show thinking indicator
-    container.style.display = 'block';
-    const thinking = document.createElement('div');
-    thinking.className = 'clarification-thinking';
-    thinking.textContent = 'Thinking…';
-    container.appendChild(thinking);
-
-    const templateName = template ? (template.name || '') : '';
-    const templateContext = template ? JSON.stringify(template) : '';
-    const maxQuestions = mode === 2 ? 1 : 3;
-
-    try {
-      // Race the API call against a 5s timeout
-      const questions = await Promise.race([
-        invoke('generate_clarification_questions', {
-          transcription: transcription || '',
-          templateName,
-          templateContext,
-          exitCapture: exitCapture || '',
-          maxQuestions,
-        }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), 5000)
-        ),
-      ]);
-
-      container.innerHTML = '';
-
-      if (!questions || questions.length === 0) {
-        container.style.display = 'none';
-        return;
-      }
-
-      const list = document.createElement('div');
-      list.className = 'clarification-list';
-      questions.forEach((q) => {
-        const item = document.createElement('div');
-        item.className = 'clarification-item';
-        item.textContent = q;
-        list.appendChild(item);
-      });
-      container.appendChild(list);
-    } catch (err) {
-      console.error('[TaskFlow] Clarification questions failed:', err.message);
-      container.style.display = 'none';
-      container.innerHTML = '';
-    }
-  }
-
-  _renderPhases(template, container) {
-    const colours = ["amber", "teal", "purple"];
-    const phases = Array.isArray(template.phases) ? template.phases : [];
-
-    phases.forEach((phase, i) => {
-      const div = document.createElement("div");
-      div.className = "phase";
-      const colour = phase.colour || colours[i] || "teal";
-      div.innerHTML = `
-        <div class="phase-dot ${colour}">${i + 1}</div>
-        <div>
-          <div class="phase-text">${phase.name}</div>
-          <div class="phase-sub">${phase.guidance}</div>
-        </div>
-      `;
-      container.appendChild(div);
-    });
+    this.pendingTask = _showEntryState(this._session, this.transcription, (s) => this.show(s));
   }
 
   // ---- Task lifecycle ----
@@ -853,7 +631,7 @@ class TaskFlowApp {
     const container = document.getElementById("template-phases");
     if (container) {
       container.innerHTML = "";
-      this._renderPhases(template, container);
+      renderPhases(template, container);
     }
     const entryTaskName = document.getElementById("entry-task-name");
     if (entryTaskName) entryTaskName.textContent = template.name;
