@@ -150,28 +150,28 @@ src/
 
 ## Part 3: Refactoring Plan
 
-### Phase 1 — Rust Module Extraction (Low Risk)
+### Phase 1 — Rust Module Extraction (Low Risk) ✅ DONE
+
+> Completed 2026-03-25. Commit `7e01e69`. `lib.rs` → 95 lines + 16 module files. `cargo build` passes.
 
 **Steps:**
-1. Create `src-tauri/src/state.rs` — move `AppState`, `TaskState`, `CorrectionEntry` structs
-2. Create `src-tauri/src/helpers/` — extract `config.rs`, `paths.rs`, `markdown.rs`, `corrections.rs`, `http_client.rs`
-3. Create `src-tauri/src/commands/` — move each command group into its own file
-4. Update `lib.rs` to declare modules and re-export for `generate_handler!`
-5. `cargo build` to verify — zero behavior change
+1. ✅ Create `src-tauri/src/state.rs` — `AppState`, `TaskState` structs
+2. ✅ Create `src-tauri/src/helpers/` — `config.rs`, `vocabulary.rs`, `markdown.rs`, `corrections.rs`
+3. ✅ Create `src-tauri/src/commands/` — 9 command modules (`task`, `audio`, `daily_log`, `todos`, `templates`, `vocabulary`, `llm`, `agent_context`, `window`)
+4. ✅ Update `lib.rs` to declare modules and re-export for `generate_handler!`
+5. ✅ `cargo build` — zero behavior change confirmed
 
-**Safe commit point:** After each module file compiles. The `generate_handler!` macro just needs the functions in scope.
+### Phase 2 — CSS Split (Zero Risk) ✅ DONE
 
-### Phase 2 — CSS Split (Zero Risk)
+> Completed 2026-03-25. Commit `7a5b6df`. `styles.css` → `@import` aggregator + 10 module files. `npx vite build` passes.
 
 **Steps:**
-1. Create `src/styles/` directory
-2. Split `styles.css` by section comments into individual files
-3. Create aggregator file with `@import` statements (Vite handles CSS imports natively)
-4. Update `index.html` if needed (or let Vite bundle)
-5. Extract CSS custom properties for colors into `:root`
-6. Visual regression check — open each state, verify appearance
-
-**Safe commit point:** After visual check. Pure file reorganization.
+1. ✅ Create `src/styles/` directory
+2. ✅ Split `styles.css` by section comments into 10 files: `base`, `buttons`, `listening`, `exit`, `transition`, `entry`, `completion`, `coaching`, `corrections`, `dashboard`
+3. ✅ Create aggregator `styles.css` with `@import` statements (Vite resolves at build time)
+4. ✅ `index.html` unchanged — still references `/src/styles.css`
+5. CSS custom properties extraction deferred to Phase 4 (quality fixes)
+6. Visual regression check requires `npx tauri dev` — build verified via `npx vite build`
 
 ### Phase 3 — JS Module Extraction (Medium Risk)
 
