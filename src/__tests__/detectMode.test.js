@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectMode } from '../logic.js';
+import { detectMode } from '../js/logic.js';
 
 describe('detectMode', () => {
   // Mode 3: urgent

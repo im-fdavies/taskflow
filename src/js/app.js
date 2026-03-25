@@ -4,9 +4,10 @@
 // ===================================================================
 
 import { VoiceCapture } from './voice-capture.js';
-import { detectMode as _detectMode, parseTranscription, matchTemplate as _matchTemplate, parseTodoIntent } from './logic.js';
+import { detectMode as _detectMode, parseTranscription, matchTemplate as _matchTemplate, parseTodoIntent, isStartIntent } from './logic.js';
 import { populateWaveform, startWaveform, stopWaveform } from './waveform.js';
 import { renderClickableTranscript } from './transcription-editor.js';
+import { findExistingTask, renderStartContext } from './start-flow.js';
 import {
   showCompletionState as _showCompletionState,
   submitCompletion as _submitCompletion,
@@ -287,6 +288,9 @@ class TaskFlowApp {
       if (urgentBar) urgentBar.style.width = "0%";
       const urgentProgress = document.getElementById("urgent-progress");
       if (urgentProgress) urgentProgress.style.display = "none";
+      // Reset start context
+      const startCtx = document.getElementById("start-context");
+      if (startCtx) startCtx.style.display = "none";
       // Reset recording UI
       const status = document.getElementById("recording-status");
       const btn = document.getElementById("btn-stop-recording");
@@ -386,7 +390,77 @@ class TaskFlowApp {
     const continueBtn = document.getElementById("btn-confirmed-continue");
     const tryAgainLink = document.getElementById("try-again-link");
     const urgentProgress = document.getElementById("urgent-progress");
+    const startContext = document.getElementById("start-context");
 
+    // Reset start context from previous use
+    if (startContext) startContext.style.display = "none";
+
+    // Detect fresh start (no active task, start-style language)
+    const freshStart = isStartIntent(this.transcription, currentTask);
+
+    if (freshStart) {
+      // --- START TASK FLOW (skip exit + transition) ---
+      if (taskEl) taskEl.textContent = `Starting: ${taskName}`;
+      if (transcriptEl) renderClickableTranscript(transcriptEl, this.transcription, (newText, parsed) => {
+        this.transcription = newText;
+        if (this._session) {
+          this._session.taskName = parsed.taskName;
+          this._session.transcription = newText;
+          const taskEl2 = document.getElementById("confirmed-task-name");
+          if (taskEl2) taskEl2.textContent = `Starting: ${parsed.taskName}`;
+        }
+      }, parseTranscription);
+
+      if (modeBadge) {
+        modeBadge.textContent = "New Task";
+        modeBadge.className = "mode-badge mode-start";
+      }
+
+      // Store session
+      this._session = {
+        mode: 2, // light mode - no exit needed
+        confidence: "start",
+        transcription: this.transcription,
+        taskName,
+        exitCapture: "",
+        template,
+        extractedExit: null,
+        extractedBookmark: null,
+        isNewStart: true,
+      };
+      this.mode = 2;
+
+      // Wire try-again
+      if (tryAgainLink) {
+        tryAgainLink.onclick = (e) => { e.preventDefault(); this.startAgain(); };
+      }
+
+      // Check for matching paused tasks / todos (async, non-blocking)
+      if (continueBtn) {
+        continueBtn.style.display = "inline-flex";
+        continueBtn.textContent = "Start →";
+        continueBtn.onclick = () => this.proceedFromStart();
+      }
+
+      findExistingTask(taskName).then((found) => {
+        if (found) {
+          console.log(`[TaskFlow] Matched existing task: ${found.match.name} (${found.type}, ${found.score})`);
+          if (found.type === "paused") {
+            if (modeBadge) {
+              modeBadge.textContent = "Resuming";
+              modeBadge.className = "mode-badge mode-start";
+            }
+            if (taskEl) taskEl.textContent = `Resuming: ${found.match.name}`;
+            this._session.taskName = found.match.name;
+          }
+          renderStartContext(found);
+        }
+      }).catch(e => console.warn("[TaskFlow] Task matching failed:", e));
+
+      return;
+    }
+
+    // --- CONTEXT SWITCH FLOW (existing behaviour) ---
     if (taskEl) taskEl.textContent = mode === 4 ? `Completing: ${taskName}` : `Switching to: ${taskName}`;
     if (transcriptEl) renderClickableTranscript(transcriptEl, this.transcription, (newText, parsed) => {
       this.transcription = newText;
@@ -409,7 +483,7 @@ class TaskFlowApp {
     // LLM fallback for ambiguous detection
     if (confidence === "default" && this._ollamaAvailable) {
       if (modeBadge) {
-        modeBadge.textContent = "Detecting…";
+        modeBadge.textContent = "Detecting\u2026";
         modeBadge.className = "mode-badge mode-detecting";
       }
       if (continueBtn) continueBtn.style.display = "none";
@@ -421,7 +495,7 @@ class TaskFlowApp {
         });
         mode = llmResult.mode;
         confidence = "llm";
-        console.log(`[TaskFlow] Ollama → mode ${mode}, reason: ${llmResult.reason}`);
+        console.log(`[TaskFlow] Ollama -> mode ${mode}, reason: ${llmResult.reason}`);
       } catch (e) {
         console.warn("[TaskFlow] Ollama fallback failed, using default:", e);
       }
@@ -464,16 +538,16 @@ class TaskFlowApp {
           if (bar) bar.style.width = "100%";
         });
       }
-      if (continueBtn) continueBtn.textContent = "Go now →";
+      if (continueBtn) continueBtn.textContent = "Go now ->";
       this._urgentTimer = setTimeout(() => {
         this._urgentTimer = null;
         this.proceedToExit();
       }, 1500);
     }
 
-    // Mode 4: completion — go straight to completion capture
+    // Mode 4: completion - go straight to completion capture
     if (mode === 4) {
-      if (continueBtn) continueBtn.textContent = "Log it →";
+      if (continueBtn) continueBtn.textContent = "Log it ->";
       continueBtn.onclick = () => this.showCompletionState();
     }
   }
@@ -486,6 +560,12 @@ class TaskFlowApp {
       return;
     }
     this.showExitState();
+  }
+
+  // ---- Start task flow (skip exit + transition) ----
+
+  proceedFromStart() {
+    this.showEntryState();
   }
 
   showExitState() {

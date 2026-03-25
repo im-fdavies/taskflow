@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTranscription } from '../logic.js';
+import { parseTranscription } from '../js/logic.js';
 
 describe('parseTranscription', () => {
   it('returns empty result for null input', () => {

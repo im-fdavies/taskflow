@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchTemplate } from '../logic.js';
+import { matchTemplate } from '../js/logic.js';
 
 const TEMPLATES = [
   { name: 'PR Amends', triggers: ['pr amends', 'pull request amends', 'PR review comments'] },

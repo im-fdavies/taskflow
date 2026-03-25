@@ -191,6 +191,86 @@ export function matchTemplate(text, templates) {
 }
 
 /**
+ * Detect whether a transcription is a "start task" intent (first task of the day)
+ * rather than a context switch between tasks.
+ * @param {string} text - Transcribed user utterance
+ * @param {string|null} currentTask - Currently active task name (null = no active task)
+ * @returns {boolean} True if this is a fresh start, not a switch
+ */
+export function isStartIntent(text, currentTask) {
+  // If there's already an active task, this is a switch, not a fresh start
+  if (currentTask) return false;
+
+  const lower = text.toLowerCase();
+
+  // Explicit start language at the beginning
+  const startPatterns = [
+    /^(?:i'm |i am )?(?:starting|picking up|beginning|working on|kicking off)\b/,
+    /^(?:let me |gonna |going to )(?:start|pick up|work on|begin|do)\b/,
+    /^(?:time to |let's )(?:start|work on|pick up|do|begin)\b/,
+    /^(?:picking up|resuming|continuing|back to|back on)\b/,
+  ];
+
+  if (startPatterns.some(p => p.test(lower))) return true;
+
+  // No exit markers = probably just stating what they're doing, not switching
+  const hasExitMarkers = /\b(?:was working on|done with|finished|leaving|coming from|interrupted|pulled away|in the middle of|got distracted)\b/i.test(text);
+  if (!hasExitMarkers) return true;
+
+  return false;
+}
+
+/**
+ * Fuzzy match a task name against a list of known task names.
+ * Returns the best match or null.
+ * @param {string} taskName - What the user said they're starting
+ * @param {Array<{name: string}>} candidates - Tasks/todos to match against
+ * @returns {{ match: object, score: string }|null}
+ */
+export function fuzzyMatchTask(taskName, candidates) {
+  if (!taskName || !candidates.length) return null;
+
+  const lower = taskName.toLowerCase().trim();
+
+  // Pass 1: exact match (case insensitive)
+  for (const c of candidates) {
+    if (c.name.toLowerCase().trim() === lower) {
+      return { match: c, score: "exact" };
+    }
+  }
+
+  // Pass 2: one contains the other
+  for (const c of candidates) {
+    const cLower = c.name.toLowerCase().trim();
+    if (cLower.includes(lower) || lower.includes(cLower)) {
+      return { match: c, score: "contains" };
+    }
+  }
+
+  // Pass 3: significant word overlap (words > 3 chars)
+  const taskWords = lower.split(/\s+/).filter(w => w.length > 3);
+  if (taskWords.length === 0) return null;
+
+  let bestMatch = null;
+  let bestOverlap = 0;
+
+  for (const c of candidates) {
+    const cWords = c.name.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    const overlap = taskWords.filter(w => cWords.some(cw => cw.includes(w) || w.includes(cw))).length;
+    if (overlap > bestOverlap) {
+      bestOverlap = overlap;
+      bestMatch = c;
+    }
+  }
+
+  if (bestMatch && bestOverlap >= 1) {
+    return { match: bestMatch, score: "overlap" };
+  }
+
+  return null;
+}
+
+/**
  * Extract a todo task from a voice command.
  * @param {string} text - Transcription text
  * @param {boolean} fromDashboard - Whether called from the dashboard voice tap

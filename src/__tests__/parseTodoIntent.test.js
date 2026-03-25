@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTodoIntent } from '../logic.js';
+import { parseTodoIntent } from '../js/logic.js';
 
 describe('parseTodoIntent', () => {
   // "add X to my todos" pattern
