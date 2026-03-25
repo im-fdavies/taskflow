@@ -218,7 +218,7 @@ src/
 | `ScriptProcessor` (deprecated) | `AudioWorkletNode` | Future-proofing (non-urgent) |
 
 ### Missing Infrastructure
-- **Tests:** At minimum, unit tests for `_parseTranscription()` and `detectMode()` (pure functions, easy to test)
+- **Tests:** ✅ Done — 52 Vitest unit tests across `detectMode`, `parseTranscription`, `matchTemplate`, `parseTodoIntent`. Pure functions extracted to `src/logic.js`.
 - **CI:** GitHub Actions for `cargo build` + `npm run build` on PR
 - **CSP:** Enable a restrictive Content Security Policy in `tauri.conf.json`
 
