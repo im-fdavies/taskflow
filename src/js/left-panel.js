@@ -12,6 +12,7 @@ export async function refreshLeftPanel(forceRefresh = false) {
 async function refreshActiveTask() {
   const container = document.getElementById("dashboard-active-task");
   const nameEl = document.getElementById("dashboard-active-task-name");
+  const switchBtn = document.getElementById("dashboard-switch-btn");
   if (!container) return;
 
   try {
@@ -19,11 +20,14 @@ async function refreshActiveTask() {
     if (state.current_task) {
       container.style.display = "block";
       if (nameEl) nameEl.textContent = state.current_task;
+      if (switchBtn) switchBtn.textContent = "Switch";
     } else {
       container.style.display = "none";
+      if (switchBtn) switchBtn.textContent = "Start";
     }
   } catch (e) {
     container.style.display = "none";
+    if (switchBtn) switchBtn.textContent = "Start";
   }
 }
 
