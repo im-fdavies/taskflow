@@ -7,6 +7,7 @@ pub mod vocabulary;
 pub mod llm;
 pub mod agent_context;
 pub mod window;
+pub mod jira;
 
 pub use task::*;
 pub use audio::*;
@@ -17,3 +18,4 @@ pub use vocabulary::*;
 pub use llm::*;
 pub use agent_context::*;
 pub use window::*;
+pub use jira::*;

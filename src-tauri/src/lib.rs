@@ -99,6 +99,7 @@ pub fn run() {
             complete_todo_entry,
             discard_todo_entry,
             read_paused_tasks,
+            read_active_task,
             read_jira_tickets,
             refresh_jira_cache,
         ])
@@ -122,6 +123,21 @@ pub fn run() {
             }
 
             tray::setup_tray(app.handle())?;
+
+            // Restore active task from daily logs (covers cross-day case where state.json has nothing)
+            {
+                let state = app.state::<AppState>();
+                let mut task = state.task.lock().expect("task state lock poisoned");
+                if task.current_task.is_none() {
+                    if let Some(active) = crate::commands::todos::read_active_task_internal() {
+                        task.current_task = Some(active.name);
+                        task.mode = "active".to_string();
+                        task.task_started_at = Some(active.time);
+                    }
+                }
+            }
+            // Update tray after potential state restore
+            crate::tray::update_tray_menu(app.handle());
 
             Ok(())
         })
