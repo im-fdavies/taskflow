@@ -78,15 +78,11 @@ fn open_today_log(_app: &AppHandle) {
     use chrono::Local;
     use std::process::Command;
 
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => return,
-    };
-
     let date_str = Local::now().format("%Y-%m-%d").to_string();
-    let log_path = home.join(".taskflow/logs").join(format!("{}.md", date_str));
+    let logs_dir = crate::helpers::config::logs_dir();
+    let log_path = logs_dir.join(format!("{}.md", date_str));
 
-    let _ = std::fs::create_dir_all(log_path.parent().unwrap_or(&home));
+    let _ = std::fs::create_dir_all(&logs_dir);
     if !log_path.exists() {
         let _ = std::fs::write(
             &log_path,

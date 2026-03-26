@@ -14,12 +14,8 @@ pub struct PausedTask {
 /// Used by the "start task" flow to detect if the user is resuming a paused task.
 #[tauri::command(rename_all = "camelCase")]
 pub fn read_paused_tasks() -> Vec<PausedTask> {
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => return vec![],
-    };
     let date_str = Local::now().format("%Y-%m-%d").to_string();
-    let log_path = home.join(".taskflow/logs").join(format!("{}.md", date_str));
+    let log_path = crate::helpers::config::logs_dir().join(format!("{}.md", date_str));
 
     if !log_path.exists() {
         return vec![];
@@ -103,12 +99,8 @@ pub struct TodoItem {
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn read_daily_todos() -> Vec<TodoItem> {
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => return vec![],
-    };
     let date_str = Local::now().format("%Y-%m-%d").to_string();
-    let log_path = home.join(".taskflow/logs").join(format!("{}.md", date_str));
+    let log_path = crate::helpers::config::logs_dir().join(format!("{}.md", date_str));
 
     if !log_path.exists() {
         return vec![];
@@ -145,9 +137,8 @@ pub fn read_daily_todos() -> Vec<TodoItem> {
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn read_daily_summary() -> Option<String> {
-    let home = dirs::home_dir()?;
     let date_str = Local::now().format("%Y-%m-%d").to_string();
-    let log_path = home.join(".taskflow/logs").join(format!("{}.md", date_str));
+    let log_path = crate::helpers::config::logs_dir().join(format!("{}.md", date_str));
 
     if !log_path.exists() {
         return None;
@@ -162,8 +153,7 @@ pub fn read_daily_summary() -> Option<String> {
 pub fn append_todo_entry(task_name: String, priority: Option<String>) -> Result<(), String> {
     use std::fs;
 
-    let home = dirs::home_dir().ok_or("Could not find home directory")?;
-    let logs_dir = home.join(".taskflow/logs");
+    let logs_dir = crate::helpers::config::logs_dir();
     fs::create_dir_all(&logs_dir).map_err(|e| format!("Failed to create logs dir: {}", e))?;
 
     let now = Local::now();
@@ -200,9 +190,8 @@ pub fn append_todo_entry(task_name: String, priority: Option<String>) -> Result<
 pub fn update_todo_entry(old_name: String, new_name: String, priority: Option<String>) -> Result<(), String> {
     use std::fs;
 
-    let home = dirs::home_dir().ok_or("Could not find home directory")?;
     let date_str = Local::now().format("%Y-%m-%d").to_string();
-    let log_path = home.join(".taskflow/logs").join(format!("{}.md", date_str));
+    let log_path = crate::helpers::config::logs_dir().join(format!("{}.md", date_str));
 
     if !log_path.exists() {
         return Err("Log file not found".to_string());
@@ -244,11 +233,10 @@ pub fn update_todo_entry(old_name: String, new_name: String, priority: Option<St
 pub fn complete_todo_entry(todo_text: String) -> Result<(), String> {
     use std::fs;
 
-    let home = dirs::home_dir().ok_or("Could not find home directory")?;
     let now = Local::now();
     let date_str = now.format("%Y-%m-%d").to_string();
     let time_str = now.format("%H:%M").to_string();
-    let log_path = home.join(".taskflow/logs").join(format!("{}.md", date_str));
+    let log_path = crate::helpers::config::logs_dir().join(format!("{}.md", date_str));
 
     if !log_path.exists() {
         return Err("Log file not found".to_string());
@@ -298,12 +286,8 @@ pub fn complete_todo_entry(todo_text: String) -> Result<(), String> {
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn read_completed_todos() -> Vec<String> {
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => return vec![],
-    };
     let date_str = Local::now().format("%Y-%m-%d").to_string();
-    let log_path = home.join(".taskflow/logs").join(format!("{}.md", date_str));
+    let log_path = crate::helpers::config::logs_dir().join(format!("{}.md", date_str));
 
     if !log_path.exists() {
         return vec![];
@@ -337,9 +321,8 @@ pub fn read_completed_todos() -> Vec<String> {
 pub fn discard_todo_entry(todo_text: String) -> Result<(), String> {
     use std::fs;
 
-    let home = dirs::home_dir().ok_or("Could not find home directory")?;
     let date_str = Local::now().format("%Y-%m-%d").to_string();
-    let log_path = home.join(".taskflow/logs").join(format!("{}.md", date_str));
+    let log_path = crate::helpers::config::logs_dir().join(format!("{}.md", date_str));
 
     if !log_path.exists() {
         return Err("Log file not found".to_string());

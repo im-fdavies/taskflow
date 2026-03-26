@@ -12,8 +12,7 @@ pub fn append_daily_log(
 ) -> Result<(), String> {
     use std::fs;
 
-    let home = dirs::home_dir().ok_or("Could not find home directory")?;
-    let logs_dir = home.join(".taskflow/logs");
+    let logs_dir = crate::helpers::config::logs_dir();
     fs::create_dir_all(&logs_dir).map_err(|e| format!("Failed to create logs dir: {}", e))?;
 
     let now = Local::now();
@@ -78,8 +77,7 @@ pub fn append_completion_log(
 ) -> Result<(), String> {
     use std::fs;
 
-    let home = dirs::home_dir().ok_or("Could not find home directory")?;
-    let logs_dir = home.join(".taskflow/logs");
+    let logs_dir = crate::helpers::config::logs_dir();
     fs::create_dir_all(&logs_dir).map_err(|e| format!("Failed to create logs dir: {}", e))?;
 
     let now = Local::now();
