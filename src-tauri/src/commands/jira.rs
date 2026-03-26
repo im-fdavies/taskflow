@@ -80,6 +80,7 @@ Only output the JSON file, nothing else. If a field is missing, use an empty str
         cache_path.display()
     );
 
+    eprintln!("[TaskFlow] Jira refresh: running claude CLI with Atlassian MCP prompt");
     let output = tokio::process::Command::new("claude")
         .arg("-p")
         .arg(&prompt)
@@ -87,7 +88,25 @@ Only output the JSON file, nothing else. If a field is missing, use an empty str
         .await;
 
     match output {
-        Ok(_) => read_jira_tickets(),
+        Ok(out) => {
+            if out.status.success() {
+                eprintln!("[TaskFlow] Jira refresh via claude CLI succeeded");
+            } else {
+                eprintln!(
+                    "[TaskFlow] Jira refresh: claude CLI exited with status {}",
+                    out.status
+                );
+                eprintln!(
+                    "[TaskFlow] Jira refresh stdout: {}",
+                    String::from_utf8_lossy(&out.stdout)
+                );
+                eprintln!(
+                    "[TaskFlow] Jira refresh stderr: {}",
+                    String::from_utf8_lossy(&out.stderr)
+                );
+            }
+            read_jira_tickets()
+        }
         Err(e) => {
             eprintln!("[TaskFlow] Failed to run claude CLI for Jira refresh: {}", e);
             read_jira_tickets()

@@ -23,6 +23,7 @@ pub fn start_task(app: AppHandle, name: String, state: tauri::State<'_, AppState
         task.mode = "active".to_string();
         task.clone()
     }; // lock released before update_tray_menu acquires it
+    result.save();
     crate::tray::update_tray_menu(&app);
     result
 }
@@ -36,6 +37,7 @@ pub fn end_task(app: AppHandle, state: tauri::State<'_, AppState>) -> TaskState 
         task.mode = "idle".to_string();
         task.clone()
     }; // lock released before update_tray_menu acquires it
+    result.save();
     crate::tray::update_tray_menu(&app);
     result
 }

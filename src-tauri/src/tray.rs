@@ -86,22 +86,25 @@ fn open_today_log(_app: &AppHandle) {
     if !log_path.exists() {
         let _ = std::fs::write(
             &log_path,
-            format!("# {}\n\n## Context\n\n## Completed Work\n\n", date_str),
+            format!("# {} - Daily Log\n\n## Summary\n\n## Todos\n\n## Completed Work\n\n", date_str),
         );
     }
 
     let path_str = log_path.to_string_lossy().to_string();
 
-    // Try opening directly with Obsidian app first (more reliable than URI scheme)
-    let result = Command::new("open")
-        .args(["-a", "Obsidian", &path_str])
-        .spawn();
+    // Primary: Obsidian URI scheme (navigates to the specific file in vault)
+    let encoded = percent_encode(&path_str);
+    let uri = format!("obsidian://open?path={}", encoded);
+    let result = Command::new("open").arg(&uri).status();
 
-    if result.is_err() {
-        // Fallback: try obsidian:// URI scheme
-        let encoded = percent_encode(&path_str);
-        let uri = format!("obsidian://open?path={}", encoded);
-        let _ = Command::new("open").arg(&uri).spawn();
+    match result {
+        Ok(status) if status.success() => {}
+        _ => {
+            // Fallback: open -a Obsidian <path>
+            let _ = Command::new("open")
+                .args(["-a", "Obsidian", &path_str])
+                .spawn();
+        }
     }
 }
 

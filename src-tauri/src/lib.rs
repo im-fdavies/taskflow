@@ -64,7 +64,7 @@ pub fn run() {
                 .build(),
         )
         .manage(AppState {
-            task: Mutex::new(TaskState::default()),
+            task: Mutex::new(TaskState::load()),
             ollama_available: Mutex::new(None),
             shortcut_pressed_at: Mutex::new(None),
         })
