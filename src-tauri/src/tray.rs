@@ -94,10 +94,19 @@ fn open_today_log(_app: &AppHandle) {
         );
     }
 
-    // obsidian://open?path=<percent-encoded absolute path>
-    let encoded = percent_encode(&log_path.to_string_lossy());
-    let uri = format!("obsidian://open?path={}", encoded);
-    let _ = Command::new("open").arg(&uri).spawn();
+    let path_str = log_path.to_string_lossy().to_string();
+
+    // Try opening directly with Obsidian app first (more reliable than URI scheme)
+    let result = Command::new("open")
+        .args(["-a", "Obsidian", &path_str])
+        .spawn();
+
+    if result.is_err() {
+        // Fallback: try obsidian:// URI scheme
+        let encoded = percent_encode(&path_str);
+        let uri = format!("obsidian://open?path={}", encoded);
+        let _ = Command::new("open").arg(&uri).spawn();
+    }
 }
 
 fn percent_encode(s: &str) -> String {

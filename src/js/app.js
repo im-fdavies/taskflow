@@ -159,6 +159,7 @@ class TaskFlowApp {
       if (this._holdTimer) clearTimeout(this._holdTimer);
       this._holdTimer = setTimeout(() => {
         this._holdMode = true;
+        this._holdTimer = null; // Mark timer as fired
         const hint = document.getElementById("listening-hint");
         if (hint && this._voiceCapture.isRecording()) {
           hint.textContent = "Release to finish";
@@ -171,8 +172,13 @@ class TaskFlowApp {
       if (this._holdMode && this._voiceCapture.isRecording()) {
         this.stopRecording();
       }
-      this._holdMode = false;
       if (this._holdTimer) { clearTimeout(this._holdTimer); this._holdTimer = null; }
+      this._holdMode = false;
+      // Reset hint if timer fired prematurely (tap that released after 300ms)
+      const hint = document.getElementById("listening-hint");
+      if (hint && hint.textContent === "Release to finish" && this._voiceCapture.isRecording()) {
+        hint.textContent = "Speak, then press Enter";
+      }
     });
 
     // Listen for dashboard open event from Rust (Cmd+Shift+D)
@@ -809,6 +815,14 @@ class TaskFlowApp {
       const text = await this._voiceCapture.stop();
       this.transcription = text;
       if (status) status.style.display = 'none';
+
+      // Guard: reject blank or empty transcription
+      const trimmed = (text || '').trim();
+      if (!trimmed || trimmed === '[BLANK_AUDIO]' || trimmed.length < 2) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Try again'; btn.onclick = () => this.startAgain(); }
+        if (hint) hint.textContent = 'No speech detected - try again';
+        return;
+      }
 
       // Auto-trigger confirmation flow after brief pause
       await this.wait(300);

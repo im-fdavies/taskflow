@@ -31,6 +31,9 @@ export function detectMode(text, currentTask) {
     "i just finished", "i've completed", "i've finished",
     "just completed", "task is done", "wrapped up",
     "all done with", "finished up",
+    "i have completed", "completed my", "i'm done",
+    "i am done", "that's done", "thats done",
+    "i've done", "i have finished", "finished my",
   ];
   if (mode4Keywords.some((k) => lower.includes(k))) {
     return { mode: 4, confidence: "keyword" };

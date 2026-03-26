@@ -175,9 +175,32 @@ export async function leftPanelVoiceTap(voiceCapture, app) {
     try {
       const text = await voiceCapture.stop();
       if (text) {
-        app.transcription = text;
-        await app.close();
-        app.showConfirmation();
+        // Guard: reject blank audio
+        const trimmed = (text || '').trim();
+        if (!trimmed || trimmed === '[BLANK_AUDIO]' || trimmed.length < 2) {
+          if (status) { status.textContent = "No speech detected - try again"; status.style.display = "block"; }
+          setTimeout(() => { if (status) status.style.display = "none"; }, 4000);
+        } else {
+          const savedText = text;
+
+          // Collapse dashboard back to overlay size (mirrors close() logic without hiding)
+          const backdrop = document.getElementById("dashboard-backdrop");
+          const leftPanel = document.getElementById("s-dashboard-left");
+          const rightPanel = document.getElementById("s-dashboard");
+          if (rightPanel) rightPanel.style.transform = "translateX(100%)";
+          if (leftPanel) leftPanel.style.transform = "translateX(-110%)";
+          if (backdrop) backdrop.classList.remove("visible");
+          await new Promise(resolve => setTimeout(resolve, 300));
+          if (rightPanel) rightPanel.style.transform = "";
+          if (leftPanel) { leftPanel.style.transform = ""; leftPanel.classList.remove("active"); }
+          if (backdrop) backdrop.style.display = "none";
+          await invoke("collapse_from_dashboard").catch(e => console.warn('[TF] collapse:', e));
+
+          // Show listening state, then restore transcription (show() resets it)
+          app.show("listening");
+          app.transcription = savedText;
+          app.showConfirmation();
+        }
       }
     } catch (e) {
       console.error("[TaskFlow] Left panel voice failed:", e);
