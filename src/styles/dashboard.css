@@ -630,3 +630,10 @@
 .btn-complete:hover {
   background: rgba(52, 199, 89, 0.3);
 }
+
+/* Override the base .state grab cursor inside dashboard panels */
+#s-dashboard-left .state-body,
+#s-dashboard .state-body {
+  cursor: default;
+  -webkit-app-region: no-drag;
+}

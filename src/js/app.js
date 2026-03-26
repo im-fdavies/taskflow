@@ -651,12 +651,33 @@ class TaskFlowApp {
     const text = input ? input.value.trim() : "";
     if (!text) return;
 
-    const savedText = text;
-    await this.collapseDashboard();
+    const btn = document.getElementById("dashboard-switch-btn");
+    if (btn) btn.disabled = true;
 
-    this.show("listening");
-    this.transcription = savedText;
-    this.showConfirmation();
+    try {
+      const currentState = await invoke("get_state");
+      if (currentState.current_task) {
+        await invoke("append_daily_log", {
+          taskName: currentState.current_task,
+          taskType: null,
+          exitCapture: "",
+          bookmark: null,
+          mode: 2,
+          durationMinutes: this._calculateDuration(currentState.task_started_at),
+        }).catch(e => console.warn("[TF] Could not log task pause:", e));
+      }
+
+      const newState = await invoke("start_task", { name: text });
+      this._updateTaskBadge(newState.current_task);
+
+      if (input) input.value = "";
+
+      await _refreshLeftPanel(false);
+    } catch (e) {
+      console.error("[TaskFlow] Dashboard switch failed:", e);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   async dashboardAddTodo() {
@@ -800,6 +821,18 @@ class TaskFlowApp {
   _updateTaskBadge(taskName) {
     const badge = document.getElementById("current-task-badge");
     if (badge) badge.textContent = taskName || "No active task";
+  }
+
+  _calculateDuration(taskStartedAt) {
+    if (!taskStartedAt) return null;
+    try {
+      const [h, m] = taskStartedAt.split(':').map(Number);
+      const now = new Date();
+      const minutes = Math.round((now.getHours() * 60 + now.getMinutes()) - (h * 60 + m));
+      return minutes > 0 ? minutes : null;
+    } catch {
+      return null;
+    }
   }
 
   async startTask() {
