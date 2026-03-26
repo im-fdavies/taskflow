@@ -187,10 +187,21 @@
       <!-- State: dashboard-left -->
       <div id="s-dashboard-left" class="state dashboard-left-panel">
         <div class="state-body">
+          <div id="dashboard-active-task" class="dashboard-active-task" style="display:none;">
+            <div class="dashboard-section-label">Currently working on</div>
+            <div class="dashboard-active-task-card">
+              <div class="dashboard-active-task-name" id="dashboard-active-task-name">-</div>
+              <div class="dashboard-active-task-actions">
+                <button class="btn btn-sm btn-complete" id="dashboard-complete-btn" onclick="app.dashboardComplete()">Complete</button>
+                <button class="btn btn-sm" id="dashboard-pause-btn" onclick="app.dashboardPause()">Pause</button>
+              </div>
+            </div>
+          </div>
+
           <div class="dashboard-section-label">Context switch</div>
-          <div class="dashboard-voice-row">
-            <button class="dashboard-mic-btn-sm" id="dashboard-left-voice-btn" onclick="app.leftPanelVoiceTap()">🎤</button>
-            <span class="dashboard-mic-hint" id="dashboard-left-voice-hint">Tap to switch context</span>
+          <div class="dashboard-text-input-row">
+            <input type="text" class="dashboard-text-input" id="dashboard-switch-input" placeholder="What are you switching to?" />
+            <button class="btn btn-sm btn-primary" id="dashboard-switch-btn" onclick="app.dashboardSwitch()">Switch</button>
           </div>
           <div class="dashboard-voice-status" id="dashboard-left-voice-status" style="display:none;"></div>
 
@@ -218,9 +229,9 @@
           <div class="dashboard-summary" id="dashboard-summary">—</div>
 
           <div class="dashboard-section-label">Add a todo</div>
-          <div class="dashboard-voice-row">
-            <button class="dashboard-mic-btn-sm" id="dashboard-voice-btn" onclick="app.dashboardVoiceTap()">🎤</button>
-            <span class="dashboard-mic-hint" id="dashboard-voice-hint">Tap and say what to add</span>
+          <div class="dashboard-text-input-row">
+            <input type="text" class="dashboard-text-input" id="dashboard-todo-input" placeholder="What needs doing?" />
+            <button class="btn btn-sm btn-primary" id="dashboard-todo-add-btn" onclick="app.dashboardAddTodo()">Add</button>
           </div>
           <div class="dashboard-voice-status" id="dashboard-voice-status" style="display:none;"></div>
           <div class="dashboard-todo-added" id="dashboard-todo-added" style="display:none;">

@@ -1,9 +1,7 @@
 // ===================================================================
 // TaskFlow — Dashboard module
-// Todo list, voice-to-todo, daily summary side panel.
+// Todo list, daily summary side panel.
 // ===================================================================
-
-import { parseTodoIntent } from './logic.js';
 
 const { invoke } = window.__TAURI__.core;
 
@@ -87,54 +85,6 @@ export async function refreshDashboardTodos() {
   }
 
   await refreshDoneTodos();
-}
-
-/**
- * Handle dashboard voice button tap (push-to-talk for adding todos).
- * @param {VoiceCapture} voiceCapture - The dashboard voice capture instance
- */
-export async function dashboardVoiceTap(voiceCapture) {
-  const btn = document.getElementById("dashboard-voice-btn");
-  const hint = document.getElementById("dashboard-voice-hint");
-  const status = document.getElementById("dashboard-voice-status");
-
-  if (voiceCapture.isRecording()) {
-    if (btn) { btn.disabled = true; btn.textContent = '…'; btn.classList.remove("recording"); }
-    if (hint) hint.style.display = "none";
-    try {
-      const text = await voiceCapture.stop();
-      if (text) {
-        const taskName = parseTodoIntent(text, true);
-        if (taskName) {
-          await invoke("append_todo_entry", { taskName });
-          if (status) { status.textContent = `✓ Added`; status.style.display = "block"; }
-          const addedPanel = document.getElementById("dashboard-todo-added");
-          const editInput = document.getElementById("dashboard-todo-edit");
-          if (addedPanel) addedPanel.style.display = "flex";
-          if (editInput) { editInput.value = taskName; editInput.focus(); editInput.select(); }
-          _lastAddedTodo = taskName;
-          await refreshDashboardTodos();
-        } else {
-          if (status) { status.textContent = `Couldn't parse that — try again`; status.style.display = "block"; }
-          setTimeout(() => { if (status) status.style.display = "none"; }, 4000);
-        }
-      }
-    } catch (e) {
-      console.error("[TaskFlow] Dashboard voice failed:", e);
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '🎤'; }
-      if (hint) hint.style.display = "";
-    }
-  } else {
-    try {
-      await voiceCapture.start();
-      if (btn) { btn.classList.add("recording"); btn.textContent = '⬛'; }
-      if (hint) hint.style.display = "none";
-      if (status) status.style.display = "none";
-    } catch (e) {
-      console.error("[TaskFlow] Dashboard mic start failed:", e);
-    }
-  }
 }
 
 async function refreshDoneTodos() {

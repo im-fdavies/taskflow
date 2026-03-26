@@ -18,7 +18,6 @@ import {
 import {
   showDashboard as _showDashboard,
   refreshDashboardTodos,
-  dashboardVoiceTap as _dashboardVoiceTap,
   dismissTodoAdded as _dismissTodoAdded,
   setLastAddedTodo,
 } from './dashboard.js';
@@ -38,7 +37,6 @@ import {
 import {
   refreshLeftPanel as _refreshLeftPanel,
   resumeTask as _resumeTask,
-  leftPanelVoiceTap as _leftPanelVoiceTap,
 } from './left-panel.js';
 
 const { invoke } = window.__TAURI__.core;
@@ -94,20 +92,6 @@ class TaskFlowApp {
       onStateChange: (isRec) => updateExitMicBtn('exit-bookmark-mic-btn', isRec),
       onAmplitude: () => {},
       onError: (msg) => console.error('Exit bookmark voice error:', msg),
-    });
-
-    // Audio recording — DASHBOARD state (push-to-talk)
-    this._dashboardVoiceCapture = new VoiceCapture({
-      onStateChange: () => {},
-      onAmplitude: () => {},
-      onError: (msg) => console.error('Dashboard voice error:', msg),
-    });
-
-    // Audio recording — LEFT PANEL state (context-switch)
-    this._leftPanelVoiceCapture = new VoiceCapture({
-      onStateChange: () => {},
-      onAmplitude: () => {},
-      onError: (msg) => console.error('Left panel voice error:', msg),
     });
 
     // P2a: template cache and current session
@@ -268,6 +252,14 @@ class TaskFlowApp {
     const exitBookmarkMicBtn = document.getElementById('exit-bookmark-mic-btn');
     if (exitBookmarkMicBtn) exitBookmarkMicBtn.addEventListener('click', () => toggleExitVoice('exit-bookmark', this._exitBookmarkVoiceCapture, 'exit-bookmark-mic-btn'));
 
+    // Enter key on dashboard text inputs
+    document.getElementById("dashboard-switch-input")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); this.dashboardSwitch(); }
+    });
+    document.getElementById("dashboard-todo-input")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); this.dashboardAddTodo(); }
+    });
+
     // Load current task state
     this.refreshState();
   }
@@ -370,8 +362,6 @@ class TaskFlowApp {
     if (this._voiceCapture.isRecording()) await this._voiceCapture.stop().catch(e => console.warn('[TF] voice stop:', e));
     if (this._exitVoiceCapture.isRecording()) await this._exitVoiceCapture.stop().catch(e => console.warn('[TF] exit voice stop:', e));
     if (this._exitBookmarkVoiceCapture.isRecording()) await this._exitBookmarkVoiceCapture.stop().catch(e => console.warn('[TF] bookmark voice stop:', e));
-    if (this._dashboardVoiceCapture.isRecording()) await this._dashboardVoiceCapture.stop().catch(e => console.warn('[TF] dashboard voice stop:', e));
-    if (this._leftPanelVoiceCapture.isRecording()) await this._leftPanelVoiceCapture.stop().catch(e => console.warn('[TF] left panel voice stop:', e));
 
     const backdrop = document.getElementById("dashboard-backdrop");
     const leftPanel = document.getElementById("s-dashboard-left");
@@ -638,19 +628,90 @@ class TaskFlowApp {
     return refreshDashboardTodos();
   }
 
-  async dashboardVoiceTap() {
-    await _dashboardVoiceTap(this._dashboardVoiceCapture);
-  }
-
   async dismissTodoAdded() {
     await _dismissTodoAdded();
   }
 
-  // ---- Left panel ----
-
-  async leftPanelVoiceTap() {
-    await _leftPanelVoiceTap(this._leftPanelVoiceCapture, this);
+  async collapseDashboard() {
+    const backdrop = document.getElementById("dashboard-backdrop");
+    const leftPanel = document.getElementById("s-dashboard-left");
+    const rightPanel = document.getElementById("s-dashboard");
+    if (rightPanel) rightPanel.style.transform = "translateX(100%)";
+    if (leftPanel) leftPanel.style.transform = "translateX(-110%)";
+    if (backdrop) backdrop.classList.remove("visible");
+    await new Promise(resolve => setTimeout(resolve, 300));
+    if (rightPanel) rightPanel.style.transform = "";
+    if (leftPanel) { leftPanel.style.transform = ""; leftPanel.classList.remove("active"); }
+    if (backdrop) backdrop.style.display = "none";
+    await invoke("collapse_from_dashboard").catch(e => console.warn('[TF] collapse:', e));
   }
+
+  async dashboardSwitch() {
+    const input = document.getElementById("dashboard-switch-input");
+    const text = input ? input.value.trim() : "";
+    if (!text) return;
+
+    const savedText = text;
+    await this.collapseDashboard();
+
+    this.show("listening");
+    this.transcription = savedText;
+    this.showConfirmation();
+  }
+
+  async dashboardAddTodo() {
+    const input = document.getElementById("dashboard-todo-input");
+    const text = input ? input.value.trim() : "";
+    if (!text) return;
+
+    try {
+      await invoke("append_todo_entry", { taskName: text });
+      input.value = "";
+      const addedPanel = document.getElementById("dashboard-todo-added");
+      const editInput = document.getElementById("dashboard-todo-edit");
+      const status = document.getElementById("dashboard-voice-status");
+      if (status) { status.textContent = `✓ Added: "${text}"`; status.style.display = "block"; }
+      if (addedPanel) addedPanel.style.display = "flex";
+      if (editInput) { editInput.value = text; editInput.focus(); editInput.select(); }
+      setLastAddedTodo(text);
+      await this._refreshDashboardTodos();
+    } catch (e) {
+      console.error("[TaskFlow] Failed to add todo:", e);
+    }
+  }
+
+  async dashboardComplete() {
+    try {
+      const state = await invoke("get_state");
+      const taskName = state.current_task || "Unknown task";
+      await this.collapseDashboard();
+      this._session.taskName = taskName;
+      this.showCompletionState();
+    } catch (e) {
+      console.error("[TaskFlow] dashboardComplete failed:", e);
+    }
+  }
+
+  async dashboardPause() {
+    try {
+      await this.collapseDashboard();
+      this._session = {
+        mode: 1,
+        confidence: "dashboard",
+        transcription: "",
+        taskName: "",
+        exitCapture: "",
+        template: null,
+        extractedExit: null,
+        extractedBookmark: null,
+      };
+      this.showExitState();
+    } catch (e) {
+      console.error("[TaskFlow] dashboardPause failed:", e);
+    }
+  }
+
+  // ---- Left panel ----
 
   async resumeTask(taskName) {
     await _resumeTask(taskName, () => this.close());

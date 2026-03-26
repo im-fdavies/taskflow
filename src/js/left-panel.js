@@ -6,7 +6,25 @@
 const { invoke } = window.__TAURI__.core;
 
 export async function refreshLeftPanel(forceRefresh = false) {
-  await Promise.all([refreshPausedTasks(), refreshJiraTickets(forceRefresh)]);
+  await Promise.all([refreshActiveTask(), refreshPausedTasks(), refreshJiraTickets(forceRefresh)]);
+}
+
+async function refreshActiveTask() {
+  const container = document.getElementById("dashboard-active-task");
+  const nameEl = document.getElementById("dashboard-active-task-name");
+  if (!container) return;
+
+  try {
+    const state = await invoke("get_state");
+    if (state.current_task) {
+      container.style.display = "block";
+      if (nameEl) nameEl.textContent = state.current_task;
+    } else {
+      container.style.display = "none";
+    }
+  } catch (e) {
+    container.style.display = "none";
+  }
 }
 
 async function refreshPausedTasks() {
@@ -161,63 +179,5 @@ export async function resumeTask(taskName, closeFn) {
     await closeFn();
   } catch (e) {
     console.error("[TaskFlow] Failed to resume task:", e);
-  }
-}
-
-export async function leftPanelVoiceTap(voiceCapture, app) {
-  const btn = document.getElementById("dashboard-left-voice-btn");
-  const hint = document.getElementById("dashboard-left-voice-hint");
-  const status = document.getElementById("dashboard-left-voice-status");
-
-  if (voiceCapture.isRecording()) {
-    if (btn) { btn.disabled = true; btn.textContent = '…'; btn.classList.remove("recording"); }
-    if (hint) hint.style.display = "none";
-    try {
-      const text = await voiceCapture.stop();
-      if (text) {
-        // Guard: reject blank audio
-        const trimmed = (text || '').trim();
-        if (!trimmed || trimmed === '[BLANK_AUDIO]' || trimmed.length < 2) {
-          if (status) { status.textContent = "No speech detected - try again"; status.style.display = "block"; }
-          setTimeout(() => { if (status) status.style.display = "none"; }, 4000);
-        } else {
-          const savedText = text;
-
-          // Collapse dashboard back to overlay size (mirrors close() logic without hiding)
-          const backdrop = document.getElementById("dashboard-backdrop");
-          const leftPanel = document.getElementById("s-dashboard-left");
-          const rightPanel = document.getElementById("s-dashboard");
-          if (rightPanel) rightPanel.style.transform = "translateX(100%)";
-          if (leftPanel) leftPanel.style.transform = "translateX(-110%)";
-          if (backdrop) backdrop.classList.remove("visible");
-          await new Promise(resolve => setTimeout(resolve, 300));
-          if (rightPanel) rightPanel.style.transform = "";
-          if (leftPanel) { leftPanel.style.transform = ""; leftPanel.classList.remove("active"); }
-          if (backdrop) backdrop.style.display = "none";
-          await invoke("collapse_from_dashboard").catch(e => console.warn('[TF] collapse:', e));
-
-          // Show listening state, then restore transcription (show() resets it)
-          app.show("listening");
-          app.transcription = savedText;
-          app.showConfirmation();
-        }
-      }
-    } catch (e) {
-      console.error("[TaskFlow] Left panel voice failed:", e);
-      if (status) { status.textContent = "Voice capture failed"; status.style.display = "block"; }
-      setTimeout(() => { if (status) status.style.display = "none"; }, 4000);
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '🎤'; }
-      if (hint) hint.style.display = "";
-    }
-  } else {
-    try {
-      await voiceCapture.start();
-      if (btn) { btn.classList.add("recording"); btn.textContent = '⬛'; }
-      if (hint) hint.style.display = "none";
-      if (status) status.style.display = "none";
-    } catch (e) {
-      console.error("[TaskFlow] Left panel mic start failed:", e);
-    }
   }
 }
