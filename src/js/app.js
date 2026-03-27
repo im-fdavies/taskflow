@@ -4,7 +4,7 @@
 // ===================================================================
 
 import { VoiceCapture } from './voice-capture.js';
-import { detectMode as _detectMode, parseTranscription, matchTemplate as _matchTemplate, parseTodoIntent, isStartIntent, isCompletionIntent } from './logic.js';
+import { detectMode as _detectMode, parseTranscription, matchTemplate as _matchTemplate, parseTodoIntent, isStartIntent, isCompletionIntent, isNoteIntent, extractNoteText } from './logic.js';
 import { populateWaveform, startWaveform, stopWaveform } from './waveform.js';
 import { renderClickableTranscript } from './transcription-editor.js';
 import { findExistingTask, renderStartContext } from './start-flow.js';
@@ -398,6 +398,23 @@ class TaskFlowApp {
       this.startAgain();
       const hint = document.getElementById('listening-hint');
       if (hint) hint.textContent = 'No speech detected — try again';
+      return;
+    }
+
+    // Check for note intent — quick thought, no context switch
+    if (isNoteIntent(this.transcription)) {
+      const noteText = extractNoteText(this.transcription) || cleanedTranscription;
+      try {
+        await invoke("append_note", { noteText });
+      } catch (e) {
+        console.error("[TaskFlow] Failed to save note:", e);
+      }
+      const hint = document.getElementById('listening-hint');
+      if (hint) hint.textContent = '📝 Note saved';
+      setTimeout(() => {
+        this.startAgain();
+        invoke("hide_overlay").catch(() => {});
+      }, 1500);
       return;
     }
 

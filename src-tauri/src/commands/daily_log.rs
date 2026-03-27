@@ -1,4 +1,4 @@
-use crate::helpers::markdown::{find_section_byte_offset, daily_log_skeleton, ensure_log_sections};
+use crate::helpers::markdown::{find_section_byte_offset, daily_log_skeleton, ensure_log_sections, extract_section};
 use chrono::Local;
 
 #[tauri::command(rename_all = "camelCase")]
@@ -201,5 +201,109 @@ fn remove_from_open_tasks(task_name: &str) {
         let new_content = new_lines.join("\n");
         let _ = fs::write(&path, new_content);
         return; // Found and removed, done
+    }
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn append_note(note_text: String) -> Result<(), String> {
+    use std::fs;
+
+    let logs_dir = crate::helpers::config::logs_dir();
+    fs::create_dir_all(&logs_dir).map_err(|e| format!("Failed to create logs dir: {}", e))?;
+
+    let now = Local::now();
+    let date_str = now.format("%Y-%m-%d").to_string();
+    let time_str = now.format("%H:%M").to_string();
+    let log_path = logs_dir.join(format!("{}.md", date_str));
+
+    let raw_content = if log_path.exists() {
+        fs::read_to_string(&log_path).map_err(|e| format!("Failed to read log: {}", e))?
+    } else {
+        daily_log_skeleton(&date_str)
+    };
+    let content = ensure_log_sections(&raw_content, &date_str);
+
+    let entry = format!("- \u{1F4DD} {} \u{2014} {}\n", time_str, note_text);
+
+    let active_task = crate::commands::todos::read_active_task_internal();
+    let new_content = if let Some(task) = active_task {
+        // Insert note under the active task's H3 entry in Open Tasks
+        let open_section = extract_section(&content, "Open Tasks");
+        let target = format!("### {}", task.name);
+
+        if open_section.lines().any(|l| l.trim() == target) {
+            insert_note_under_task(&content, &task.name, &entry)
+        } else {
+            // Active task not in Open Tasks — fall back to Summary
+            insert_note_in_summary(&content, &entry)
+        }
+    } else {
+        // No active task — insert into Summary
+        insert_note_in_summary(&content, &entry)
+    };
+
+    fs::write(&log_path, new_content).map_err(|e| format!("Failed to write log: {}", e))?;
+    Ok(())
+}
+
+/// Insert a note line under a task's H3 heading in Open Tasks,
+/// after its metadata lines but before the next ### or section boundary.
+fn insert_note_under_task(content: &str, task_name: &str, entry: &str) -> String {
+    let target = format!("### {}", task_name);
+    let mut lines: Vec<&str> = content.lines().collect();
+    let mut in_open_tasks = false;
+    let mut insert_idx: Option<usize> = None;
+
+    for (i, line) in lines.iter().enumerate() {
+        // Track whether we're inside the Open Tasks section
+        if line.starts_with("# ") && !line.starts_with("## ") && !line.starts_with("### ") {
+            in_open_tasks = line.trim() == "# Open Tasks";
+        }
+
+        if in_open_tasks && line.trim() == target {
+            // Found the task heading — scan forward past metadata lines
+            let mut j = i + 1;
+            while j < lines.len() {
+                let next = lines[j];
+                // Stop at next H3, next H1 section, or blank line after metadata
+                if next.starts_with("### ") {
+                    break;
+                }
+                if next.starts_with("# ") && !next.starts_with("## ") && !next.starts_with("### ") {
+                    break;
+                }
+                if next.trim().is_empty() {
+                    // Insert before the blank line (keep spacing)
+                    break;
+                }
+                j += 1;
+            }
+            insert_idx = Some(j);
+            break;
+        }
+    }
+
+    match insert_idx {
+        Some(idx) => {
+            // Insert the entry line(s) at the found position
+            let entry_trimmed = entry.trim_end_matches('\n');
+            lines.insert(idx, entry_trimmed);
+            lines.join("\n")
+        }
+        None => {
+            // Shouldn't happen, but fall back to summary
+            insert_note_in_summary(content, entry)
+        }
+    }
+}
+
+/// Insert a note line at the end of the Summary section (before # Open Tasks).
+fn insert_note_in_summary(content: &str, entry: &str) -> String {
+    match find_section_byte_offset(content, "Open Tasks") {
+        Some(pos) => {
+            let before = content[..pos].trim_end();
+            format!("{}\n{}\n{}", before, entry, &content[pos..])
+        }
+        None => format!("{}\n{}", content, entry),
     }
 }

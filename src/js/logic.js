@@ -303,6 +303,31 @@ export function fuzzyMatchTask(taskName, candidates) {
 }
 
 /**
+ * Detect whether a transcription is a "note to self" intent.
+ * @param {string} text - Transcribed user utterance
+ * @returns {boolean}
+ */
+export function isNoteIntent(text) {
+  if (!text) return false;
+  const lower = text.toLowerCase().trim();
+  return /^(?:note(?:\s+to\s+self)?|just\s+a\s+note|quick\s+note|jot\s+(?:this\s+)?down|noting\s+that|i\s+want\s+to\s+note|reminder\s+to\s+self)\b/i.test(lower);
+}
+
+/**
+ * Strip the note trigger phrase, returning just the note content.
+ * @param {string} text - Raw transcription
+ * @returns {string}
+ */
+export function extractNoteText(text) {
+  if (!text) return '';
+  const stripped = text.replace(
+    /^(?:note\s+to\s+self|just\s+a\s+note|quick\s+note|jot\s+this\s+down|jot\s+down|noting\s+that|i\s+want\s+to\s+note|reminder\s+to\s+self|note)\s*/i,
+    ''
+  ).replace(/^[,.:;\-–—]\s*/, '').trim();
+  return stripped;
+}
+
+/**
  * Extract a todo task from a voice command.
  * @param {string} text - Transcription text
  * @param {boolean} fromDashboard - Whether called from the dashboard voice tap
