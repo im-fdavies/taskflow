@@ -225,6 +225,34 @@ export function isStartIntent(text, currentTask) {
 }
 
 /**
+ * Detect whether a transcription is a task completion intent.
+ * @param {string} text - Transcribed user utterance
+ * @param {string|null} currentTask - Currently active task name
+ * @returns {boolean} True if this is a completion, not a switch or start
+ */
+export function isCompletionIntent(text, currentTask) {
+  // Can't complete if nothing is active
+  if (!currentTask) return false;
+
+  const lower = text.toLowerCase();
+  const completionPatterns = [
+    /\bi(?:'ve| have) (?:completed|finished)\b/,
+    /\bi(?:'m| am) done\b/,
+    /\bi just finished\b/,
+    /\bjust completed\b/,
+    /\btask is done\b/,
+    /\bwrapped up\b/,
+    /\ball done with\b/,
+    /\bfinished up\b/,
+    /\bthat'?s done\b/,
+    /\bfinished my\b/,
+    /\bcompleted my\b/,
+  ];
+
+  return completionPatterns.some(p => p.test(lower));
+}
+
+/**
  * Fuzzy match a task name against a list of known task names.
  * Returns the best match or null.
  * @param {string} taskName - What the user said they're starting

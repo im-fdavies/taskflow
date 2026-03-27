@@ -7,6 +7,15 @@ const { invoke } = window.__TAURI__.core;
 
 let _lastAddedTodo = null;
 
+/** Lightweight markdown→HTML for summary entries (no external lib needed) */
+function renderSummary(text) {
+  return text
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/^### (.+)$/gm, '<div class="summary-entry-title">$1</div>')
+    .replace(/\n/g, "<br>");
+}
+
 /**
  * Open the dashboard panel: expand window, show backdrop, load data.
  * @param {function} showState - app.show()
@@ -26,7 +35,25 @@ export async function showDashboard(showState) {
   const summaryEl = document.getElementById("dashboard-summary");
   try {
     const summary = await invoke("read_daily_summary");
-    if (summaryEl) summaryEl.textContent = summary || "No summary written yet for today.";
+    if (summaryEl) {
+      if (summary) {
+        // Show time + task name + switch mode, strip other metadata
+        const lines = summary.split("\n");
+        const condensed = [];
+        for (const l of lines) {
+          if (l.startsWith("### ")) {
+            condensed.push(l);
+          } else if (l.startsWith("- **Switch:**")) {
+            // Append mode to the previous heading line
+            const mode = l.replace("- **Switch:**", "").trim();
+            if (condensed.length && mode) condensed[condensed.length - 1] += ` · ${mode}`;
+          }
+        }
+        summaryEl.innerHTML = renderSummary(condensed.join("\n") || summary);
+      } else {
+        summaryEl.innerHTML = "No summary written yet for today.";
+      }
+    }
   } catch (e) {
     if (summaryEl) summaryEl.textContent = "—";
   }
@@ -88,28 +115,12 @@ export async function refreshDashboardTodos() {
 }
 
 async function refreshDoneTodos() {
+  // Right panel DONE section disabled — completed tasks belong on the left panel
+  // (left-panel.js → #dashboard-tasks-done-list). Hide the right panel elements.
   const list = document.getElementById("dashboard-done-list");
   const label = document.getElementById("dashboard-done-label");
-  if (!list) return;
-
-  try {
-    const completed = await invoke("read_completed_todos");
-    list.innerHTML = "";
-    if (completed.length > 0) {
-      if (label) label.style.display = "";
-      for (const name of completed) {
-        const div = document.createElement("div");
-        div.className = "dashboard-done-item";
-        div.textContent = name;
-        list.appendChild(div);
-      }
-    } else {
-      if (label) label.style.display = "none";
-    }
-  } catch (e) {
-    if (label) label.style.display = "none";
-    list.innerHTML = "";
-  }
+  if (list) list.innerHTML = "";
+  if (label) label.style.display = "none";
 }
 
 async function completeTodo(todoText, element) {

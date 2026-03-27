@@ -1,6 +1,6 @@
 ---
 description: "User tells agent which prompt to tackle next. Agent takes Prompts from the ./.copilot/prompts folder.\n\nAgent reads through the prompt and acts according to his core agent prompt, defined below."
-name: taskflow-dev
+name: Devvo
 ---
 
 # taskflow-dev instructions

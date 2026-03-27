@@ -10,6 +10,12 @@ pub struct PausedTask {
     pub time: String,
 }
 
+#[derive(Serialize, Clone)]
+pub struct OpenTask {
+    pub name: String,
+    pub notes: String,
+}
+
 // ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
@@ -55,6 +61,66 @@ fn all_completed_names() -> std::collections::HashSet<String> {
         }
     }
     completed
+}
+
+// ---------------------------------------------------------------------------
+// Open Tasks helpers
+// ---------------------------------------------------------------------------
+
+/// Internal version — usable from lib.rs setup without Tauri command machinery.
+pub fn read_open_tasks_internal() -> Vec<OpenTask> {
+    let completed = all_completed_names();
+    let mut tasks: Vec<OpenTask> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for path in all_log_files() {
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let date_str = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        let content = ensure_log_sections(&raw, &date_str);
+        let section = extract_section(&content, "Open Tasks");
+
+        let mut current_name: Option<String> = None;
+        let mut current_notes: Vec<String> = Vec::new();
+
+        for line in section.lines() {
+            if line.starts_with("### ") {
+                // Save previous entry
+                if let Some(name) = current_name.take() {
+                    if !completed.contains(&name) && !seen.contains(&name) {
+                        seen.insert(name.clone());
+                        tasks.push(OpenTask {
+                            name,
+                            notes: current_notes.join("\n").trim().to_string(),
+                        });
+                    }
+                    current_notes.clear();
+                }
+                current_name = Some(line[4..].trim().to_string());
+            } else if current_name.is_some() && !line.trim().is_empty() {
+                current_notes.push(line.to_string());
+            }
+        }
+        // Last entry in section
+        if let Some(name) = current_name {
+            if !completed.contains(&name) && !seen.contains(&name) {
+                seen.insert(name.clone());
+                tasks.push(OpenTask {
+                    name,
+                    notes: current_notes.join("\n").trim().to_string(),
+                });
+            }
+        }
+    }
+
+    tasks
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn read_open_tasks() -> Vec<OpenTask> {
+    read_open_tasks_internal()
 }
 
 // ---------------------------------------------------------------------------
@@ -252,58 +318,14 @@ pub fn read_daily_todos() -> Vec<TodoItem> {
 
 /// Internal version — usable from lib.rs setup without Tauri command machinery.
 pub fn read_active_task_internal() -> Option<PausedTask> {
-    for path in all_log_files() {
-        let content = match std::fs::read_to_string(&path) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-        let summary = extract_section(&content, "Summary");
-        let mut entries: Vec<(String, String, bool)> = Vec::new(); // (time, name, has_switch)
-        let mut current: Option<(String, String)> = None;
-        let mut has_switch = false;
-
-        for line in summary.lines() {
-            if line.starts_with("### ") {
-                if let Some((time, name)) = current.take() {
-                    entries.push((time, name, has_switch));
-                }
-                has_switch = false;
-                let rest = &line[4..];
-                if let Some(dash_pos) = rest.find(" - ") {
-                    let time = rest[..dash_pos].trim().to_string();
-                    let name = rest[dash_pos + 3..].trim().to_string();
-                    if !name.starts_with("COMPLETED:") {
-                        current = Some((time, name));
-                    }
-                }
-            } else if line.trim_start().starts_with("- **Switch:**") {
-                has_switch = true;
-            }
-        }
-        if let Some((time, name)) = current {
-            entries.push((time, name, has_switch));
-        }
-
-        // The last entry in this (newest scanned) file with no switch metadata = active
-        if let Some(last) = entries.last() {
-            if !last.2 {
-                return Some(PausedTask {
-                    name: last.1.clone(),
-                    bookmark: None,
-                    exit_notes: None,
-                    time: last.0.clone(),
-                });
-            }
-        }
-
-        // If this file had entries but all were switched, no active task
-        if !entries.is_empty() {
-            return None;
-        }
-        // Empty file — try the next (older) file
-    }
-
-    None
+    let open_tasks = read_open_tasks_internal();
+    // The first one (from newest file) is the most recently started
+    open_tasks.into_iter().next().map(|t| PausedTask {
+        name: t.name,
+        bookmark: None,
+        exit_notes: None,
+        time: String::new(),
+    })
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -353,7 +375,10 @@ pub fn append_todo_entry(task_name: String, priority: Option<String>) -> Result<
 
     // Insert before ## Completed Work (which is right after ## Todos section)
     let new_content = match find_section_byte_offset(&content, "Completed Work") {
-        Some(pos) => format!("{}{}{}", &content[..pos], entry, &content[pos..]),
+        Some(pos) => {
+            let before = content[..pos].trim_end();
+            format!("{}\n\n{}{}", before, entry, &content[pos..])
+        }
         None => format!("{}{}", content, entry),
     };
 

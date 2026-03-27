@@ -131,6 +131,49 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
+/* ---- Start context (resuming a paused task) ---- */
+
+.start-context {
+  background: rgba(16, 185, 129, 0.06);
+  border: 0.5px solid rgba(16, 185, 129, 0.15);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.start-context-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(110, 231, 183, 0.7);
+  margin-bottom: 6px;
+}
+
+.start-context-body {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.5;
+}
+
+.start-context-item {
+  margin-bottom: 4px;
+}
+
+.start-context-item:last-child {
+  margin-bottom: 0;
+}
+
+.start-context-icon {
+  margin-right: 4px;
+}
+
+.mode-badge.mode-start {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.25);
+  color: rgba(110, 231, 183, 0.9);
+}
+
 /* ---- Urgent auto-advance progress ---- */
 
 .urgent-progress {

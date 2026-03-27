@@ -64,7 +64,7 @@ pub fn run() {
                 .build(),
         )
         .manage(AppState {
-            task: Mutex::new(TaskState::load()),
+            task: Mutex::new(TaskState::default()),
             ollama_available: Mutex::new(None),
             shortcut_pressed_at: Mutex::new(None),
         })
@@ -100,8 +100,10 @@ pub fn run() {
             discard_todo_entry,
             read_paused_tasks,
             read_active_task,
+            read_open_tasks,
             read_jira_tickets,
             refresh_jira_cache,
+            get_task_elapsed,
         ])
         .setup(|app| {
             // Register the global shortcut
@@ -124,7 +126,7 @@ pub fn run() {
 
             tray::setup_tray(app.handle())?;
 
-            // Restore active task from daily logs (covers cross-day case where state.json has nothing)
+            // Restore active task from daily logs (Open Tasks section)
             {
                 let state = app.state::<AppState>();
                 let mut task = state.task.lock().expect("task state lock poisoned");

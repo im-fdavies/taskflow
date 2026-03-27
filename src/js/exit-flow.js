@@ -65,6 +65,11 @@ export function showExitState(session, callbacks) {
     notes.classList.add("prefilled");
     const hintEl = document.getElementById("exit-prefilled-hint");
     if (hintEl) { hintEl.textContent = "From your description"; hintEl.style.display = "block"; }
+  } else if (!extractedExit && session.currentTask && notes) {
+    notes.value = session.currentTask;
+    notes.classList.add("prefilled");
+    const hintEl = document.getElementById("exit-prefilled-hint");
+    if (hintEl) { hintEl.textContent = "Current task"; hintEl.style.display = "block"; }
   } else {
     if (notes) notes.classList.remove("prefilled");
     const hintEl = document.getElementById("exit-prefilled-hint");
@@ -111,6 +116,7 @@ export function showExitState(session, callbacks) {
   callbacks.showState('exit');
   // Apply value after show() — WKWebView textarea reset workaround
   if (extractedExit && notes) notes.value = extractedExit;
+  else if (!extractedExit && session.currentTask && notes) notes.value = session.currentTask;
   setTimeout(() => { if (notes) notes.focus(); }, 200);
   if (mode !== 3) {
     fetchExitQuestion(session);

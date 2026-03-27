@@ -4,7 +4,7 @@
 // ===================================================================
 
 import { VoiceCapture } from './voice-capture.js';
-import { detectMode as _detectMode, parseTranscription, matchTemplate as _matchTemplate, parseTodoIntent, isStartIntent } from './logic.js';
+import { detectMode as _detectMode, parseTranscription, matchTemplate as _matchTemplate, parseTodoIntent, isStartIntent, isCompletionIntent } from './logic.js';
 import { populateWaveform, startWaveform, stopWaveform } from './waveform.js';
 import { renderClickableTranscript } from './transcription-editor.js';
 import { findExistingTask, renderStartContext } from './start-flow.js';
@@ -392,6 +392,15 @@ class TaskFlowApp {
         ? badgeEl.textContent
         : null;
 
+    // Reject blank, junk, or degenerate transcriptions
+    const cleanedTranscription = (this.transcription || '').trim();
+    if (!cleanedTranscription || /^\[.*BLANK.*\]$/i.test(cleanedTranscription) || cleanedTranscription.replace(/[.\s]/g, '').length < 2) {
+      this.startAgain();
+      const hint = document.getElementById('listening-hint');
+      if (hint) hint.textContent = 'No speech detected — try again';
+      return;
+    }
+
     // Check for todo intent first - "add X to my todos/list"
     const todoTask = parseTodoIntent(this.transcription, false);
     if (todoTask) {
@@ -408,6 +417,23 @@ class TaskFlowApp {
       if (addedPanel) addedPanel.style.display = "flex";
       if (editInput) { editInput.value = todoTask; editInput.focus(); editInput.select(); }
       setLastAddedTodo(todoTask);
+      return;
+    }
+
+    // Check for completion intent — "I've finished", "task is done", etc.
+    if (isCompletionIntent(this.transcription, currentTask)) {
+      this._session = {
+        mode: 4,
+        confidence: "completion_intent",
+        transcription: this.transcription,
+        taskName: currentTask,  // Use CURRENT task, not parsed transcription
+        exitCapture: "",
+        template: null,
+        extractedExit: null,
+        extractedBookmark: null,
+      };
+      this.mode = 4;
+      this.showCompletionState();
       return;
     }
 
@@ -466,6 +492,7 @@ class TaskFlowApp {
         extractedExit: null,
         extractedBookmark: null,
         isNewStart: true,
+        currentTask: null,
       };
       this.mode = 2;
 
@@ -558,6 +585,7 @@ class TaskFlowApp {
       template,
       extractedExit: exitContext,
       extractedBookmark: bookmark,
+      currentTask,
     };
     this.mode = mode;
 

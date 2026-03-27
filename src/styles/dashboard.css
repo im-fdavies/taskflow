@@ -144,6 +144,10 @@
   display: block;
 }
 
+.summary-entry { margin-bottom: 0.75rem; }
+.summary-entry-title { font-weight: 600; margin-bottom: 0.25rem; color: var(--text-primary, #e0e0e0); }
+.summary-entry-meta { font-size: 0.85em; color: var(--text-secondary, #999); line-height: 1.4; }
+
 .dashboard-voice-row {
   display: flex;
   align-items: center;

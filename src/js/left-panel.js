@@ -6,7 +6,7 @@
 const { invoke } = window.__TAURI__.core;
 
 export async function refreshLeftPanel(forceRefresh = false) {
-  await Promise.all([refreshActiveTask(), refreshPausedTasks(), refreshJiraTickets(forceRefresh)]);
+  await Promise.all([refreshActiveTask(), refreshPausedTasks(), refreshJiraTickets(forceRefresh), refreshTasksDone()]);
 }
 
 async function refreshActiveTask() {

@@ -1,6 +1,7 @@
 use tauri::{AppHandle, Manager};
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
+use chrono::Timelike;
 use crate::state::AppState;
 
 const TRAY_ID: &str = "main";
@@ -8,7 +9,7 @@ const TRAY_ID: &str = "main";
 /// Creates and registers the system tray icon with menu. Call once from `.setup()`.
 pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?;
-    let menu = build_menu(app, None)?;
+    let menu = build_menu(app, None, None)?;
 
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
@@ -30,18 +31,32 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
 /// Rebuilds the tray menu and tooltip to reflect the current task state.
 /// Must be called *after* the task state lock is released to avoid a deadlock.
 pub fn update_tray_menu(app: &AppHandle) {
-    let (task_name, tooltip) = {
+    let (task_name, elapsed, tooltip) = {
         let state = app.state::<AppState>();
         let task = state.task.lock().expect("task state lock poisoned");
         let name = task.current_task.clone();
-        let tt = match &name {
-            Some(n) => format!("TaskFlow - {}", n),
-            None => "TaskFlow - No active task".to_string(),
+        let elapsed = task.task_started_at.as_ref().and_then(|started| {
+            let parts: Vec<&str> = started.split(':').collect();
+            if parts.len() != 2 { return None; }
+            let h: u32 = parts[0].parse().ok()?;
+            let m: u32 = parts[1].parse().ok()?;
+            let now = chrono::Local::now();
+            let now_mins = now.hour() * 60 + now.minute();
+            let start_mins = h * 60 + m;
+            if now_mins < start_mins { return None; }
+            let el = now_mins - start_mins;
+            if el >= 60 { Some(format!("{}h {}m", el / 60, el % 60)) }
+            else { Some(format!("{}m", el)) }
+        });
+        let tt = match (&name, &elapsed) {
+            (Some(n), Some(t)) => format!("TaskFlow - {} ({})", n, t),
+            (Some(n), None) => format!("TaskFlow - {}", n),
+            _ => "TaskFlow - No active task".to_string(),
         };
-        (name, tt)
+        (name, elapsed, tt)
     };
 
-    if let Ok(menu) = build_menu(app, task_name) {
+    if let Ok(menu) = build_menu(app, task_name, elapsed) {
         if let Some(tray) = app.tray_by_id(TRAY_ID) {
             let _ = tray.set_menu(Some(menu));
             let _ = tray.set_tooltip(Some(&tooltip));
@@ -52,8 +67,13 @@ pub fn update_tray_menu(app: &AppHandle) {
 fn build_menu(
     app: &AppHandle,
     current_task: Option<String>,
+    elapsed: Option<String>,
 ) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
-    let label = current_task.unwrap_or_else(|| "No active task".to_string());
+    let label = match (&current_task, &elapsed) {
+        (Some(name), Some(time)) => format!("{} ({})", name, time),
+        (Some(name), None) => name.clone(),
+        _ => "No active task".to_string(),
+    };
 
     let task_item = MenuItemBuilder::with_id("current_task", &label)
         .enabled(false)
@@ -90,20 +110,25 @@ fn open_today_log(_app: &AppHandle) {
         );
     }
 
-    let path_str = log_path.to_string_lossy().to_string();
-
-    // Primary: Obsidian URI scheme (navigates to the specific file in vault)
-    let encoded = percent_encode(&path_str);
-    let uri = format!("obsidian://open?path={}", encoded);
+    // Use vault name + relative file path (more reliable than absolute path,
+    // especially with cloud storage paths like Dropbox/iCloud)
+    let vault_name = logs_dir.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("DailyNotes");
+    let file_name = date_str; // no extension - Obsidian adds .md automatically
+    let uri = format!(
+        "obsidian://open?vault={}&file={}",
+        percent_encode(vault_name),
+        percent_encode(&file_name),
+    );
     let result = Command::new("open").arg(&uri).status();
 
     match result {
         Ok(status) if status.success() => {}
         _ => {
-            // Fallback: open -a Obsidian <path>
-            let _ = Command::new("open")
-                .args(["-a", "Obsidian", &path_str])
-                .spawn();
+            // Fallback: open the file directly with whatever handles .md
+            let path_str = log_path.to_string_lossy().to_string();
+            let _ = Command::new("open").arg(&path_str).spawn();
         }
     }
 }

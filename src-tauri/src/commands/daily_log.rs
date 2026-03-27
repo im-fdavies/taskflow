@@ -51,10 +51,11 @@ pub fn append_daily_log(
         time_str, task_name, mode_label, task_type_str, duration_str, exit_str, bookmark_str
     );
 
-    // Insert before "## Todos" so entries live in the Summary section,
-    // not inside Todos (which would contaminate read_daily_todos).
-    // Fall back to before "## Completed Work", then append.
-    let insert_pos = find_section_byte_offset(&content, "Todos")
+    // Insert before "## Open Tasks" so entries live in the Summary section,
+    // not inside Open Tasks or Todos (which would contaminate those sections).
+    // Fall back to before "## Todos", then "## Completed Work", then append.
+    let insert_pos = find_section_byte_offset(&content, "Open Tasks")
+        .or_else(|| find_section_byte_offset(&content, "Todos"))
         .or_else(|| find_section_byte_offset(&content, "Completed Work"));
     let new_content = match insert_pos {
         Some(pos) => format!("{}{}{}", &content[..pos], entry, &content[pos..]),
@@ -126,5 +127,79 @@ pub fn append_completion_log(
 
     fs::write(&log_path, content).map_err(|e| format!("Failed to write log file: {}", e))?;
 
+    // Remove from Open Tasks in any log file
+    remove_from_open_tasks(&task_name);
+
     Ok(())
+}
+
+fn remove_from_open_tasks(task_name: &str) {
+    use std::fs;
+    use crate::helpers::markdown::{ensure_log_sections, extract_section};
+
+    let logs_dir = crate::helpers::config::logs_dir();
+    let mut files: Vec<std::path::PathBuf> = match std::fs::read_dir(&logs_dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().map_or(false, |ext| ext == "md"))
+            .collect(),
+        Err(_) => return,
+    };
+    files.sort_by(|a, b| b.cmp(a));
+
+    let target = format!("### {}", task_name);
+
+    for path in files {
+        let raw = match fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let date_str = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        let content = ensure_log_sections(&raw, &date_str);
+
+        // Check if this task is in Open Tasks for this file
+        let open_section = extract_section(&content, "Open Tasks");
+        if !open_section.lines().any(|l| l.trim() == target) {
+            continue;
+        }
+
+        // Remove the H3 entry and any content below it until the next H3 or section end
+        let mut new_lines: Vec<&str> = Vec::new();
+        let mut in_open_tasks = false;
+        let mut skipping_entry = false;
+
+        for line in content.lines() {
+            if line.starts_with("# ") && !line.starts_with("## ") && !line.starts_with("### ") {
+                if line.trim() == "# Open Tasks" {
+                    in_open_tasks = true;
+                    skipping_entry = false;
+                    new_lines.push(line);
+                    continue;
+                } else {
+                    in_open_tasks = false;
+                    skipping_entry = false;
+                    new_lines.push(line);
+                    continue;
+                }
+            }
+
+            if in_open_tasks && line.starts_with("### ") {
+                if line.trim() == target {
+                    skipping_entry = true;
+                    continue;
+                } else {
+                    skipping_entry = false;
+                }
+            }
+
+            if !skipping_entry {
+                new_lines.push(line);
+            }
+        }
+
+        let new_content = new_lines.join("\n");
+        let _ = fs::write(&path, new_content);
+        return; // Found and removed, done
+    }
 }
