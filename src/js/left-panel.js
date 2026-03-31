@@ -6,19 +6,19 @@
 const { invoke } = window.__TAURI__.core;
 
 /**
- * Create a note 📝 button + expandable panel for a task card.
+ * Create an expandable notes panel for a task card.
+ * Contains a read-only existing-notes section + textarea + Save button.
+ * The panel starts hidden; toggling is handled by the card's click listener.
  * @param {string} taskName - The name of the task to attach notes to
- * @returns {{ button: HTMLElement, panel: HTMLElement }}
+ * @returns {{ panel: HTMLElement }}
  */
 function createNotePanel(taskName) {
-  const btn = document.createElement("button");
-  btn.className = "dashboard-task-note-btn";
-  btn.textContent = "📝";
-  btn.title = "Add note";
-
   const panel = document.createElement("div");
   panel.className = "dashboard-task-notes-panel";
   panel.style.display = "none";
+
+  const existingDiv = document.createElement("div");
+  existingDiv.className = "dashboard-task-notes-existing";
 
   const textarea = document.createElement("textarea");
   textarea.className = "dashboard-task-notes-textarea";
@@ -29,39 +29,15 @@ function createNotePanel(taskName) {
   saveBtn.className = "dashboard-task-notes-save";
   saveBtn.textContent = "Save";
 
+  panel.appendChild(existingDiv);
   panel.appendChild(textarea);
   panel.appendChild(saveBtn);
-
-  btn.addEventListener("click", async () => {
-    const isOpen = panel.style.display === "block";
-    if (isOpen) {
-      panel.style.display = "none";
-      return;
-    }
-    // Pre-populate with existing notes (📝 lines only)
-    try {
-      const openTasks = await invoke("read_open_tasks");
-      const task = openTasks.find(t => t.name === taskName);
-      if (task && task.notes) {
-        const noteLines = task.notes
-          .split("\n")
-          .filter(l => l.includes("📝"))
-          .map(l => l.replace(/^-\s*📝\s*/, "").trim())
-          .join("\n");
-        textarea.value = noteLines;
-      } else {
-        textarea.value = "";
-      }
-    } catch {
-      textarea.value = "";
-    }
-    panel.style.display = "block";
-    textarea.focus();
-  });
 
   textarea.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       panel.style.display = "none";
+      const card = panel.closest(".dashboard-task-item, .dashboard-active-task-card");
+      if (card) card.classList.remove("expanded");
     }
   });
 
@@ -76,14 +52,69 @@ function createNotePanel(taskName) {
     }
     panel.style.display = "none";
     textarea.value = "";
+    const card = panel.closest(".dashboard-task-item, .dashboard-active-task-card");
+    if (card) card.classList.remove("expanded");
     await refreshLeftPanel();
   });
 
-  return { button: btn, panel };
+  return { panel };
 }
 
 export async function refreshLeftPanel(forceRefresh = false) {
   await Promise.all([refreshActiveTask(), refreshPausedTasks(), refreshJiraTickets(forceRefresh), refreshTasksDone()]);
+}
+
+/**
+ * Toggle the notes panel on a task card and populate existing notes.
+ * @param {HTMLElement} card - The card element (.dashboard-task-item or .dashboard-active-task-card)
+ * @param {HTMLElement} panel - The notes panel element
+ * @param {string} taskName - The task name to fetch notes for
+ */
+async function toggleNotePanel(card, panel, taskName) {
+  const isOpen = panel.style.display !== "none";
+  if (isOpen) {
+    panel.style.display = "none";
+    card.classList.remove("expanded");
+    return;
+  }
+
+  // Populate existing notes
+  const existingDiv = panel.querySelector(".dashboard-task-notes-existing");
+  if (existingDiv) {
+    try {
+      const openTasks = await invoke("read_open_tasks");
+      const task = openTasks.find(t => t.name === taskName);
+      existingDiv.innerHTML = "";
+      if (task && task.notes) {
+        const noteLines = task.notes
+          .split("\n")
+          .filter(l => l.includes("📝"))
+          .map(l => l.replace(/^-\s*📝\s*/, "").trim());
+        if (noteLines.length > 0) {
+          for (const line of noteLines) {
+            const noteEl = document.createElement("div");
+            noteEl.textContent = line;
+            existingDiv.appendChild(noteEl);
+          }
+          existingDiv.style.display = "";
+        } else {
+          existingDiv.style.display = "none";
+        }
+      } else {
+        existingDiv.style.display = "none";
+      }
+    } catch {
+      existingDiv.style.display = "none";
+    }
+  }
+
+  panel.style.display = "block";
+  card.classList.add("expanded");
+  const textarea = panel.querySelector(".dashboard-task-notes-textarea");
+  if (textarea) {
+    textarea.value = "";
+    textarea.focus();
+  }
 }
 
 async function refreshActiveTask() {
@@ -102,17 +133,35 @@ async function refreshActiveTask() {
       // Add note panel to active task card (remove any previous one first)
       const card = document.querySelector(".dashboard-active-task-card");
       if (card) {
-        const oldBtn = card.querySelector(".dashboard-task-note-btn");
         const oldPanel = card.querySelector(".dashboard-task-notes-panel");
-        if (oldBtn) oldBtn.remove();
         if (oldPanel) oldPanel.remove();
+        card.classList.remove("expanded");
 
-        const { button, panel } = createNotePanel(state.current_task);
-        const actions = card.querySelector(".dashboard-active-task-actions");
-        if (actions) {
-          actions.appendChild(button);
-        }
+        const { panel } = createNotePanel(state.current_task);
         card.appendChild(panel);
+
+        // Add chevron indicator to card if not already present
+        let chevron = card.querySelector(".dashboard-task-chevron");
+        if (!chevron) {
+          chevron = document.createElement("span");
+          chevron.className = "dashboard-task-chevron";
+          chevron.textContent = "▾";
+          const nameElInCard = card.querySelector(".dashboard-active-task-name");
+          if (nameElInCard) nameElInCard.appendChild(chevron);
+        }
+
+        // Bind click-to-expand once only (card is persistent HTML)
+        if (!card.getAttribute("data-notes-bound")) {
+          card.setAttribute("data-notes-bound", "true");
+          card.addEventListener("click", (e) => {
+            if (e.target.closest(".btn-complete, .btn, .dashboard-task-notes-save, .dashboard-task-notes-textarea")) return;
+            const currentPanel = card.querySelector(".dashboard-task-notes-panel");
+            if (currentPanel) {
+              const tn = nameEl ? nameEl.textContent : "";
+              toggleNotePanel(card, currentPanel, tn);
+            }
+          });
+        }
       }
     } else {
       container.style.display = "none";
@@ -167,9 +216,20 @@ async function refreshPausedTasks() {
         div.appendChild(resumeBtn);
 
         // Add note panel to paused task card
-        const { button: noteBtn, panel: notePanel } = createNotePanel(task.name);
-        div.appendChild(noteBtn);
+        const { panel: notePanel } = createNotePanel(task.name);
         div.appendChild(notePanel);
+
+        // Add chevron indicator
+        const chevron = document.createElement("span");
+        chevron.className = "dashboard-task-chevron";
+        chevron.textContent = "▾";
+        name.appendChild(chevron);
+
+        // Card-level click-to-expand
+        div.addEventListener("click", (e) => {
+          if (e.target.closest(".dashboard-task-resume, .dashboard-task-notes-save, .dashboard-task-notes-textarea")) return;
+          toggleNotePanel(div, notePanel, task.name);
+        });
 
         list.appendChild(div);
       }
