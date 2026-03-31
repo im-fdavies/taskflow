@@ -789,6 +789,7 @@ class TaskFlowApp {
         template: null,
         extractedExit: null,
         extractedBookmark: null,
+        pauseOnly: true,
       };
       this.showExitState();
     } catch (e) {
@@ -858,6 +859,7 @@ class TaskFlowApp {
     await _showTransitionState(this._session, {
       showState: (s) => this.show(s),
       showEntryState: () => this.showEntryState(),
+      closeOverlay: () => { invoke("end_task"); invoke("hide_overlay").catch(() => {}); },
     });
   }
 

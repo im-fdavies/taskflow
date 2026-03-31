@@ -13,9 +13,12 @@ const { invoke } = window.__TAURI__.core;
 export async function showTransitionState(session, callbacks) {
   const { mode, exitCapture, taskName } = session;
 
+  let previousTaskName = null;
+
   // Log the context switch
   try {
     const previousState = await invoke("get_state");
+    previousTaskName = previousState.current_task;
     const startTime = previousState.task_started_at;
     let durationMinutes = null;
     if (startTime) {
@@ -67,9 +70,15 @@ export async function showTransitionState(session, callbacks) {
   // Mode 1
   if (prompt) prompt.textContent = "Context saved.";
   if (bookmark) bookmark.style.display = "block";
-  if (bookmarkContent) bookmarkContent.textContent = exitCapture || "—";
+  if (bookmarkContent) bookmarkContent.textContent = previousTaskName || taskName || "—";
   if (autoMsg) autoMsg.style.display = "none";
-  if (confirmBtn) { confirmBtn.style.display = "inline-flex"; confirmBtn.textContent = "Confirmed"; }
+  if (confirmBtn) {
+    confirmBtn.style.display = "inline-flex";
+    confirmBtn.textContent = "Confirmed";
+    if (session.pauseOnly) {
+      confirmBtn.onclick = () => callbacks.closeOverlay();
+    }
+  }
   if (footerText) footerText.textContent = "Saved to daily log";
 
   callbacks.showState("transition");
