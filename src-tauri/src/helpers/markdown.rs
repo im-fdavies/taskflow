@@ -25,7 +25,7 @@ pub(crate) fn find_section_byte_offset(content: &str, section_name: &str) -> Opt
 }
 
 pub(crate) fn daily_log_skeleton(date_str: &str) -> String {
-    format!("# {} - Daily Log\n\n# Summary\n\n\n# Open Tasks\n\n\n# Todos\n\n\n# Completed Work\n\n", date_str)
+    format!("# {} - Daily Log\n\n# Summary\n\n\n# Open Tasks\n\n\n# Todos\n\n\n# Timers\n\n\n# Completed Work\n\n", date_str)
 }
 
 /// Ensure a log file has the v2 section structure. If sections are missing,
@@ -67,6 +67,14 @@ pub(crate) fn ensure_log_sections(content: &str, date_str: &str) -> String {
         match find_section_byte_offset(&result, "Completed Work") {
             Some(pos) => result.insert_str(pos, "# Todos\n\n\n"),
             None => result.push_str("\n# Todos\n\n\n"),
+        }
+    }
+
+    // Ensure # Timers exists (between Todos and Completed Work)
+    if find_section_byte_offset(&result, "Timers").is_none() {
+        match find_section_byte_offset(&result, "Completed Work") {
+            Some(pos) => result.insert_str(pos, "# Timers\n\n\n"),
+            None => result.push_str("\n# Timers\n\n\n"),
         }
     }
 

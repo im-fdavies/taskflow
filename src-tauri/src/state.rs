@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,6 +19,26 @@ impl Default for TaskState {
     }
 }
 
+pub struct TimerEntry {
+    pub id: String,
+    pub fire_time: String,
+    pub title: String,
+    pub body: String,
+    pub timer_type: String,
+    pub task_name: Option<String>,
+    pub handle: Option<tokio::task::JoinHandle<()>>,
+}
+
+#[derive(Clone, Serialize)]
+pub struct TimerInfo {
+    pub id: String,
+    pub fire_time: String,
+    pub title: String,
+    pub body: String,
+    pub timer_type: String,
+    pub task_name: Option<String>,
+}
+
 pub struct AppState {
     pub task: Mutex<TaskState>,
     // Cached after the first check; Ollama availability won't change mid-session.
@@ -25,4 +46,5 @@ pub struct AppState {
     pub ollama_available: Mutex<Option<bool>>,
     // Tracks when Cmd+Shift+Space was pressed to measure hold duration.
     pub shortcut_pressed_at: Mutex<Option<std::time::Instant>>,
+    pub timers: Mutex<HashMap<String, TimerEntry>>,
 }
