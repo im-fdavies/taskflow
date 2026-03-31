@@ -1,10 +1,10 @@
-# Slack webhook morning summary
+# DONE: Slack webhook morning summary
 
 | Field | Value |
 |---|---|
 | Phase | P4: Logging |
 | Priority | Should have |
-| Status | Not started |
+| Status | Done |
 | Est. Effort | Small (1-2h) |
 | Dependencies | Daily markdown log (done) |
 
@@ -64,3 +64,28 @@ webhook_url = "https://hooks.slack.com/services/T.../B.../..."
 - The webhook URL needs to be created manually in Slack admin (Incoming Webhooks app) and pasted into config.toml
 - Future: move webhook URL and channel to a configurable settings UI
 - Future: make the summary format/tone configurable
+
+## Completion
+
+**Tested by:**
+- `node --check scripts/slack-morning-summary.mjs` — exit 0, no syntax errors
+- Structural regex check of all 10 key features (tomlValue, expandHome, callClaude, fallbackSummary, postToSlack, weekend skip, Monday daysBack=3, AbortController, claude-haiku model, anthropic-version header) — all ✓
+- `cargo build --manifest-path src-tauri/Cargo.toml` — compiles clean (2 expected dead_code warnings for unused slack fields, exit 0)
+- Verified `package.json` contains `"slack-summary": "node scripts/slack-morning-summary.mjs"` in scripts
+- Verified `SLACK-SUMMARY.md` replaced with usage documentation matching prompt spec exactly
+- Did NOT run script against real Slack webhook per instructions
+
+**Unexpected outcomes:**
+- None
+
+**Follow-up tasks:**
+- None
+
+**Confidence:** [9/10] — All four steps implemented exactly as specified, cargo compiles clean, script parses cleanly. Only reason not 10 is the script wasn't run end-to-end against a live webhook (per instructions).
+
+**Files modified:**
+- `scripts/slack-morning-summary.mjs`
+- `src-tauri/src/helpers/config.rs`
+- `package.json`
+- `SLACK-SUMMARY.md`
+- `.github/TASKS/SLACK-MORNING-SUMMARY-TASK.md`

@@ -3,6 +3,7 @@ pub(crate) struct Config {
     pub api: Option<ApiConfig>,
     pub project: Option<ProjectConfig>,
     pub logs: Option<LogsConfig>,
+    pub slack: Option<SlackConfig>,
 }
 
 #[derive(serde::Deserialize, Default)]
@@ -18,6 +19,11 @@ pub(crate) struct ApiConfig {
 #[derive(serde::Deserialize, Default)]
 pub(crate) struct ProjectConfig {
     pub active_path: Option<String>,
+}
+
+#[derive(serde::Deserialize, Default)]
+pub(crate) struct SlackConfig {
+    pub webhook_url: Option<String>,
 }
 
 pub(crate) fn load_config() -> Config {

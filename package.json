@@ -12,6 +12,7 @@
     "ollama:serve": "ollama serve",
     "start": "ollama serve & npx tauri dev",
     "rust:check": "cargo build --manifest-path src-tauri/Cargo.toml",
+    "slack-summary": "node scripts/slack-morning-summary.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

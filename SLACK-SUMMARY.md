@@ -1,58 +1,44 @@
-# Slack Morning Summary — Setup Guide
+# Slack Morning Summary
 
-## Step 1: Create the scheduled task
+Automated morning Slack message summarising yesterday's TaskFlow activity.
 
-In Claude Code, run:
+## Setup
 
-```
-/scheduled-tasks create --name "TaskFlow Morning Summary" --schedule "45 9 * * 1-5"
-```
+1. Create a Slack Incoming Webhook at https://api.slack.com/apps → Incoming Webhooks
+2. Add the webhook URL to `~/.taskflow/config.toml`:
 
-## Step 2: Paste this as the task prompt
-
-```
-You are posting a morning Slack summary for Flynn's TaskFlow daily log.
-
-STEP 1 - Determine which log to read:
-- If today is Monday, read Friday's log
-- If today is Tuesday-Friday, read yesterday's log
-- Log path: /Users/flynn.davies/Library/CloudStorage/Dropbox/DailyNotes/YYYY-MM-DD.md
-
-STEP 2 - Read the log file. If it doesn't exist or is empty:
-- Post to Slack: "No activity logged yesterday - heads up 👀"
-- Stop here.
-
-STEP 3 - Parse the log and generate a second-person narrative summary:
-- Start with: "Yesterday you [main activities]"
-- List completed tasks with context from exit notes
-- Mention any outstanding todos or open tasks
-- Keep it conversational, 3-6 sentences max
-- Use second person ("you did", "you worked on")
-
-STEP 4 - Read webhook URL from ~/.taskflow/config.toml ([slack] webhook_url section), then post:
-
-curl -X POST -H 'Content-Type: application/json' \
-  -d '{"text": "YOUR_SUMMARY_HERE"}' \
-  WEBHOOK_URL
-
-If the webhook URL is not configured, print an error and stop.
+```toml
+[slack]
+webhook_url = "https://hooks.slack.com/services/T.../B.../..."
 ```
 
-## Step 3: Test manually
+3. Ensure your daily notes path is configured:
 
-Run the task once manually to verify:
-1. It reads the correct log file
-2. The summary reads well in second person
-3. The Slack message arrives in your DMs
+```toml
+[logs]
+path = "~/Library/CloudStorage/Dropbox/DailyNotes"
+```
 
-## Step 4: Mark task done
+## Usage
 
-Update `.github/TASKS/SLACK-MORNING-SUMMARY-TASK.md`:
-- Change Status to `Done`, prepend `DONE: ` to H1
-- Add Completion section
+```bash
+npm run slack-summary
+```
 
-## Already configured ✓
+## Scheduling
 
-- Webhook URL: `~/.taskflow/config.toml` → `[slack] webhook_url`
-- Logs path: `/Users/flynn.davies/Library/CloudStorage/Dropbox/DailyNotes/`
-- Cron: `45 9 * * 1-5` = 09:45 Monday–Friday
+Add to crontab for weekday mornings:
+
+```bash
+crontab -e
+# Add: 45 9 * * 1-5 cd /path/to/taskflow && /usr/local/bin/node scripts/slack-morning-summary.mjs
+```
+
+Or use a Claude scheduled task to run at 09:45 weekdays.
+
+## Day-of-week logic
+
+- **Saturday/Sunday**: Skips silently
+- **Monday**: Reads Friday's log
+- **Tuesday–Friday**: Reads yesterday's log
+- **Missing log**: Posts a heads-up message to Slack
