@@ -390,6 +390,7 @@ class TaskFlowApp {
       if (backdrop) { backdrop.classList.remove("visible"); backdrop.style.display = "none"; }
     }
 
+    this.currentState = null;
     try { await invoke("hide_overlay"); } catch (e) { console.error("[TaskFlow] Failed to hide overlay:", e); }
   }
 
