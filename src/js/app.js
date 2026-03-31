@@ -166,9 +166,13 @@ class TaskFlowApp {
       }
     });
 
-    // Listen for dashboard open event from Rust (Cmd+Shift+D)
-    await listen("dashboard-opened", () => {
-      this.showDashboard();
+    // Listen for dashboard toggle event from Rust (Cmd+Shift+D)
+    await listen("dashboard-toggle", () => {
+      if (this.currentState === "dashboard") {
+        this.close();
+      } else {
+        this.showDashboard();
+      }
     });
 
     // Listen for notification-fired event from timer engine

@@ -25,7 +25,7 @@ pub(crate) fn toggle_dashboard(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = window.show();
         let _ = window.set_focus();
-        let _ = window.emit("dashboard-opened", ());
+        let _ = window.emit("dashboard-toggle", ());
     }
 }
 

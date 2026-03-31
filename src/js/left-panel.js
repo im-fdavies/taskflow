@@ -5,6 +5,26 @@
 
 const { invoke } = window.__TAURI__.core;
 
+function noteLineToHtml(line) {
+  // Convert URLs to clickable links (open externally)
+  let html = line.replace(
+    /(https?:\/\/[^\s<]+)/g,
+    '<a href="$1" target="_blank" rel="noopener">$1</a>'
+  );
+  // Detect bullet lines (starting with * or -)
+  const trimmed = line.trim();
+  if (/^\*\s+/.test(trimmed) || /^-\s+/.test(trimmed)) {
+    const content = trimmed.replace(/^[\*\-]\s+/, '');
+    // Re-run URL replacement on the stripped content
+    const contentHtml = content.replace(
+      /(https?:\/\/[^\s<]+)/g,
+      '<a href="$1" target="_blank" rel="noopener">$1</a>'
+    );
+    return `<li>${contentHtml}</li>`;
+  }
+  return `<div>${html}</div>`;
+}
+
 /**
  * Create an expandable notes panel for a task card.
  * Contains a read-only existing-notes section + textarea + Save button.
@@ -103,10 +123,33 @@ async function toggleNotePanel(card, panel, taskName) {
           for (const block of blocks) {
             const blockDiv = document.createElement("div");
             blockDiv.className = "dashboard-note-block";
+            let hasListItems = false;
+            const listBuffer = [];
             for (const bline of block) {
-              const noteEl = document.createElement("div");
-              noteEl.textContent = bline;
-              blockDiv.appendChild(noteEl);
+              const html = noteLineToHtml(bline);
+              if (html.startsWith('<li>')) {
+                hasListItems = true;
+                listBuffer.push(html);
+              } else {
+                // Flush any buffered list items first
+                if (listBuffer.length > 0) {
+                  const ul = document.createElement('ul');
+                  ul.className = 'dashboard-note-list';
+                  ul.innerHTML = listBuffer.join('');
+                  blockDiv.appendChild(ul);
+                  listBuffer.length = 0;
+                }
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = html;
+                blockDiv.appendChild(wrapper.firstChild || wrapper);
+              }
+            }
+            // Flush remaining list items
+            if (listBuffer.length > 0) {
+              const ul = document.createElement('ul');
+              ul.className = 'dashboard-note-list';
+              ul.innerHTML = listBuffer.join('');
+              blockDiv.appendChild(ul);
             }
             existingDiv.appendChild(blockDiv);
           }
