@@ -89,7 +89,9 @@ pub fn read_open_tasks_internal() -> Vec<OpenTask> {
             if line.starts_with("### ") {
                 // Save previous entry
                 if let Some(name) = current_name.take() {
-                    if !completed.contains(&name) && !seen.contains(&name) {
+                    if !completed.contains(&name) && !seen.contains(&name)
+                        && !name.is_empty() && name != "Unknown task" && !name.trim().is_empty()
+                    {
                         seen.insert(name.clone());
                         tasks.push(OpenTask {
                             name,
@@ -105,7 +107,9 @@ pub fn read_open_tasks_internal() -> Vec<OpenTask> {
         }
         // Last entry in section
         if let Some(name) = current_name {
-            if !completed.contains(&name) && !seen.contains(&name) {
+            if !completed.contains(&name) && !seen.contains(&name)
+                && !name.is_empty() && name != "Unknown task" && !name.trim().is_empty()
+            {
                 seen.insert(name.clone());
                 tasks.push(OpenTask {
                     name,
@@ -319,13 +323,19 @@ pub fn read_daily_todos() -> Vec<TodoItem> {
 /// Internal version — usable from lib.rs setup without Tauri command machinery.
 pub fn read_active_task_internal() -> Option<PausedTask> {
     let open_tasks = read_open_tasks_internal();
-    // The first one (from newest file) is the most recently started
-    open_tasks.into_iter().next().map(|t| PausedTask {
-        name: t.name,
-        bookmark: None,
-        exit_notes: None,
-        time: String::new(),
-    })
+    let paused_names: std::collections::HashSet<String> = read_paused_tasks()
+        .into_iter()
+        .map(|p| p.name)
+        .collect();
+    // The first non-paused open task (from newest file) is the active one
+    open_tasks.into_iter()
+        .find(|t| !paused_names.contains(&t.name))
+        .map(|t| PausedTask {
+            name: t.name,
+            bookmark: None,
+            exit_notes: None,
+            time: String::new(),
+        })
 }
 
 #[tauri::command(rename_all = "camelCase")]

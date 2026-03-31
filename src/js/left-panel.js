@@ -83,18 +83,32 @@ async function toggleNotePanel(card, panel, taskName) {
   if (existingDiv) {
     try {
       const openTasks = await invoke("read_open_tasks");
-      const task = openTasks.find(t => t.name === taskName);
+      const task = openTasks.find(t => t.name.trim() === taskName.trim());
       existingDiv.innerHTML = "";
       if (task && task.notes) {
-        const noteLines = task.notes
-          .split("\n")
-          .filter(l => l.includes("📝"))
-          .map(l => l.replace(/^-\s*📝\s*/, "").trim());
-        if (noteLines.length > 0) {
-          for (const line of noteLines) {
-            const noteEl = document.createElement("div");
-            noteEl.textContent = line;
-            existingDiv.appendChild(noteEl);
+        const lines = task.notes.split("\n");
+        const blocks = [];
+        let currentBlock = null;
+        for (const line of lines) {
+          if (line.includes("📝")) {
+            if (currentBlock) blocks.push(currentBlock);
+            currentBlock = [line.replace(/^-\s*📝\s*/, "").trim()];
+          } else if (currentBlock && line.trim() && !line.trim().startsWith("- **")) {
+            currentBlock.push(line.trim());
+          }
+        }
+        if (currentBlock) blocks.push(currentBlock);
+
+        if (blocks.length > 0) {
+          for (const block of blocks) {
+            const blockDiv = document.createElement("div");
+            blockDiv.className = "dashboard-note-block";
+            for (const bline of block) {
+              const noteEl = document.createElement("div");
+              noteEl.textContent = bline;
+              blockDiv.appendChild(noteEl);
+            }
+            existingDiv.appendChild(blockDiv);
           }
           existingDiv.style.display = "";
         } else {
@@ -157,7 +171,7 @@ async function refreshActiveTask() {
             if (e.target.closest(".btn-complete, .btn, .dashboard-task-notes-save, .dashboard-task-notes-textarea")) return;
             const currentPanel = card.querySelector(".dashboard-task-notes-panel");
             if (currentPanel) {
-              const tn = nameEl ? nameEl.textContent : "";
+              const tn = nameEl ? nameEl.textContent.replace("▾", "").trim() : "";
               toggleNotePanel(card, currentPanel, tn);
             }
           });

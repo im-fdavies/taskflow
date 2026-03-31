@@ -16,6 +16,11 @@ pub fn set_mode(mode: String, state: tauri::State<'_, AppState>) -> TaskState {
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn start_task(app: AppHandle, name: String, state: tauri::State<'_, AppState>) -> TaskState {
+    // Guard against empty/blank task names to prevent ghost entries
+    if name.trim().is_empty() {
+        return state.task.lock().expect("task state lock poisoned").clone();
+    }
+
     // Write to Open Tasks in today's log
     add_to_open_tasks(&name);
 
