@@ -302,6 +302,87 @@ export function fuzzyMatchTask(taskName, candidates) {
   return null;
 }
 
+// Shared note trigger phrases - longest match first so extraction strips correctly.
+const NOTE_TRIGGER_PATTERN = '(?:note\\s+to\\s+self|just\\s+a\\s+note|quick\\s+note|jot\\s+this\\s+down|jot\\s+down|noting\\s+that|i\\s+want\\s+to\\s+note|reminder\\s+to\\s+self|note)';
+const NOTE_DETECT_RE = new RegExp(`^${NOTE_TRIGGER_PATTERN}\\b`, 'i');
+const NOTE_STRIP_RE = new RegExp(`^${NOTE_TRIGGER_PATTERN}\\s*`, 'i');
+
+// Targeted task note patterns: "add note to {taskName} {noteText}", "note on {taskName} {noteText}", "note for {taskName} {noteText}"
+const TASK_NOTE_PATTERNS = [
+  /^add\s+note\s+to\s+(.+)/i,
+  /^note\s+on\s+(.+)/i,
+  /^note\s+for\s+(.+)/i,
+];
+
+/**
+ * Detect a "note for specific task" intent.
+ * Fuzzy-matches the task name against the list of open task names (prefers longest match).
+ * @param {string} text - Transcribed user utterance
+ * @param {string[]} openTaskNames - Names of all open/paused tasks
+ * @returns {{ taskName: string, noteText: string }|null}
+ */
+export function parseTaskNoteIntent(text, openTaskNames) {
+  if (!text || !openTaskNames || openTaskNames.length === 0) return null;
+
+  const trimmed = text.trim();
+
+  for (const pattern of TASK_NOTE_PATTERNS) {
+    const m = trimmed.match(pattern);
+    if (!m) continue;
+
+    const remainder = m[1].trim();
+    const lowerRemainder = remainder.toLowerCase();
+
+    // Find the longest matching task name (prefer longest to avoid ambiguity)
+    let bestMatch = null;
+    let bestLen = 0;
+
+    for (const name of openTaskNames) {
+      const lowerName = name.toLowerCase();
+      if (lowerRemainder.startsWith(lowerName)) {
+        if (name.length > bestLen) {
+          bestMatch = name;
+          bestLen = name.length;
+        }
+      }
+    }
+
+    if (bestMatch) {
+      const noteText = remainder.slice(bestLen).replace(/^[,.:;\-–—\s]+/, '').trim();
+      if (noteText) {
+        return { taskName: bestMatch, noteText };
+      }
+    }
+
+    // Fall back to case-insensitive substring match anywhere in the remainder
+    let substringMatch = null;
+    let substringLen = 0;
+
+    for (const name of openTaskNames) {
+      const lowerName = name.toLowerCase();
+      const idx = lowerRemainder.indexOf(lowerName);
+      if (idx !== -1 && name.length > substringLen) {
+        substringMatch = name;
+        substringLen = name.length;
+      }
+    }
+
+    if (substringMatch) {
+      const lowerName = substringMatch.toLowerCase();
+      const idx = lowerRemainder.indexOf(lowerName);
+      const noteText = (remainder.slice(0, idx) + remainder.slice(idx + substringLen))
+        .replace(/^[,.:;\-–—\s]+/, '')
+        .replace(/[,.:;\-–—\s]+$/, '')
+        .trim();
+      if (noteText) {
+        return { taskName: substringMatch, noteText };
+      }
+    }
+  }
+
+  return null;
+}
+
 /**
  * Detect whether a transcription is a "note to self" intent.
  * @param {string} text - Transcribed user utterance
@@ -309,8 +390,7 @@ export function fuzzyMatchTask(taskName, candidates) {
  */
 export function isNoteIntent(text) {
   if (!text) return false;
-  const lower = text.toLowerCase().trim();
-  return /^(?:note(?:\s+to\s+self)?|just\s+a\s+note|quick\s+note|jot\s+(?:this\s+)?down|noting\s+that|i\s+want\s+to\s+note|reminder\s+to\s+self)\b/i.test(lower);
+  return NOTE_DETECT_RE.test(text.toLowerCase().trim());
 }
 
 /**
@@ -320,11 +400,7 @@ export function isNoteIntent(text) {
  */
 export function extractNoteText(text) {
   if (!text) return '';
-  const stripped = text.replace(
-    /^(?:note\s+to\s+self|just\s+a\s+note|quick\s+note|jot\s+this\s+down|jot\s+down|noting\s+that|i\s+want\s+to\s+note|reminder\s+to\s+self|note)\s*/i,
-    ''
-  ).replace(/^[,.:;\-–—]\s*/, '').trim();
-  return stripped;
+  return text.replace(NOTE_STRIP_RE, '').replace(/^[,.:;\-–—]\s*/, '').trim();
 }
 
 /**

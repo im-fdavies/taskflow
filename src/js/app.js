@@ -4,7 +4,7 @@
 // ===================================================================
 
 import { VoiceCapture } from './voice-capture.js';
-import { detectMode as _detectMode, parseTranscription, matchTemplate as _matchTemplate, parseTodoIntent, isStartIntent, isCompletionIntent, isNoteIntent, extractNoteText } from './logic.js';
+import { detectMode as _detectMode, parseTranscription, matchTemplate as _matchTemplate, parseTodoIntent, isStartIntent, isCompletionIntent, isNoteIntent, extractNoteText, parseTaskNoteIntent } from './logic.js';
 import { populateWaveform, startWaveform, stopWaveform } from './waveform.js';
 import { renderClickableTranscript } from './transcription-editor.js';
 import { findExistingTask, renderStartContext } from './start-flow.js';
@@ -399,6 +399,25 @@ class TaskFlowApp {
       const hint = document.getElementById('listening-hint');
       if (hint) hint.textContent = 'No speech detected — try again';
       return;
+    }
+
+    // Check for targeted task note intent — "add note to {taskName} {noteText}"
+    try {
+      const openTasks = await invoke("read_open_tasks");
+      const taskNames = openTasks.map(t => t.name);
+      const taskNoteResult = parseTaskNoteIntent(this.transcription, taskNames);
+      if (taskNoteResult) {
+        await invoke("append_task_note", { taskName: taskNoteResult.taskName, noteText: taskNoteResult.noteText });
+        const hint = document.getElementById('listening-hint');
+        if (hint) hint.textContent = `📝 Note added to ${taskNoteResult.taskName}`;
+        setTimeout(() => {
+          this.startAgain();
+          invoke("hide_overlay").catch(() => {});
+        }, 1500);
+        return;
+      }
+    } catch (e) {
+      console.error("[TaskFlow] Failed targeted task note check:", e);
     }
 
     // Check for note intent — quick thought, no context switch

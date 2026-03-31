@@ -5,6 +5,83 @@
 
 const { invoke } = window.__TAURI__.core;
 
+/**
+ * Create a note 📝 button + expandable panel for a task card.
+ * @param {string} taskName - The name of the task to attach notes to
+ * @returns {{ button: HTMLElement, panel: HTMLElement }}
+ */
+function createNotePanel(taskName) {
+  const btn = document.createElement("button");
+  btn.className = "dashboard-task-note-btn";
+  btn.textContent = "📝";
+  btn.title = "Add note";
+
+  const panel = document.createElement("div");
+  panel.className = "dashboard-task-notes-panel";
+  panel.style.display = "none";
+
+  const textarea = document.createElement("textarea");
+  textarea.className = "dashboard-task-notes-textarea";
+  textarea.placeholder = "Add a note…";
+  textarea.rows = 3;
+
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "dashboard-task-notes-save";
+  saveBtn.textContent = "Save";
+
+  panel.appendChild(textarea);
+  panel.appendChild(saveBtn);
+
+  btn.addEventListener("click", async () => {
+    const isOpen = panel.style.display === "block";
+    if (isOpen) {
+      panel.style.display = "none";
+      return;
+    }
+    // Pre-populate with existing notes (📝 lines only)
+    try {
+      const openTasks = await invoke("read_open_tasks");
+      const task = openTasks.find(t => t.name === taskName);
+      if (task && task.notes) {
+        const noteLines = task.notes
+          .split("\n")
+          .filter(l => l.includes("📝"))
+          .map(l => l.replace(/^-\s*📝\s*/, "").trim())
+          .join("\n");
+        textarea.value = noteLines;
+      } else {
+        textarea.value = "";
+      }
+    } catch {
+      textarea.value = "";
+    }
+    panel.style.display = "block";
+    textarea.focus();
+  });
+
+  textarea.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      panel.style.display = "none";
+    }
+  });
+
+  saveBtn.addEventListener("click", async () => {
+    const text = textarea.value.trim();
+    if (text) {
+      try {
+        await invoke("append_task_note", { taskName, noteText: text });
+      } catch (e) {
+        console.error("[TaskFlow] Failed to save task note:", e);
+      }
+    }
+    panel.style.display = "none";
+    textarea.value = "";
+    await refreshLeftPanel();
+  });
+
+  return { button: btn, panel };
+}
+
 export async function refreshLeftPanel(forceRefresh = false) {
   await Promise.all([refreshActiveTask(), refreshPausedTasks(), refreshJiraTickets(forceRefresh), refreshTasksDone()]);
 }
@@ -21,6 +98,22 @@ async function refreshActiveTask() {
       container.style.display = "block";
       if (nameEl) nameEl.textContent = state.current_task;
       if (switchBtn) switchBtn.textContent = "Switch";
+
+      // Add note panel to active task card (remove any previous one first)
+      const card = document.querySelector(".dashboard-active-task-card");
+      if (card) {
+        const oldBtn = card.querySelector(".dashboard-task-note-btn");
+        const oldPanel = card.querySelector(".dashboard-task-notes-panel");
+        if (oldBtn) oldBtn.remove();
+        if (oldPanel) oldPanel.remove();
+
+        const { button, panel } = createNotePanel(state.current_task);
+        const actions = card.querySelector(".dashboard-active-task-actions");
+        if (actions) {
+          actions.appendChild(button);
+        }
+        card.appendChild(panel);
+      }
     } else {
       container.style.display = "none";
       if (switchBtn) switchBtn.textContent = "Start";
@@ -72,6 +165,11 @@ async function refreshPausedTasks() {
         resumeBtn.textContent = "Resume";
         resumeBtn.onclick = () => window.app.resumeTask(task.name);
         div.appendChild(resumeBtn);
+
+        // Add note panel to paused task card
+        const { button: noteBtn, panel: notePanel } = createNotePanel(task.name);
+        div.appendChild(noteBtn);
+        div.appendChild(notePanel);
 
         list.appendChild(div);
       }

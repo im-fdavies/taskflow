@@ -94,6 +94,7 @@ pub fn run() {
             append_daily_log,
             append_completion_log,
             append_note,
+            append_task_note,
             expand_for_dashboard,
             collapse_from_dashboard,
             update_todo_entry,
