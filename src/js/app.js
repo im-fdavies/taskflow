@@ -54,6 +54,7 @@ const STATES = [
   "completion",
   "coaching",
   "gate",
+  "notification",
   "dashboard",
 ];
 
@@ -168,6 +169,11 @@ class TaskFlowApp {
     // Listen for dashboard open event from Rust (Cmd+Shift+D)
     await listen("dashboard-opened", () => {
       this.showDashboard();
+    });
+
+    // Listen for notification-fired event from timer engine
+    await listen("notification-fired", (event) => {
+      this.showNotification(event.payload);
     });
 
     // Clicking the frosted backdrop closes the dashboard
@@ -693,7 +699,43 @@ class TaskFlowApp {
   }
 
   async dismissTodoAdded() {
+    // Check for a reminder pill before dismissing (pill DOM is cleared by _dismissTodoAdded)
+    const activePill = document.querySelector("#dashboard-todo-reminder .dashboard-pill.active");
+    const todoInput = document.getElementById("dashboard-todo-edit");
+    const todoText = todoInput ? todoInput.value.trim() : "";
+
     await _dismissTodoAdded();
+
+    // Register a reminder timer if a pill was selected
+    if (activePill && todoText) {
+      const value = activePill.dataset.value;
+      if (value === "custom") return; // custom time picker is future work
+
+      let fireTime;
+      const now = new Date();
+      if (value === "30m") {
+        const d = new Date(now.getTime() + 30 * 60000);
+        fireTime = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      } else if (value === "1h") {
+        const d = new Date(now.getTime() + 60 * 60000);
+        fireTime = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      } else if (value === "2h") {
+        const d = new Date(now.getTime() + 120 * 60000);
+        fireTime = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      } else if (value === "eod") {
+        fireTime = "17:00";
+      }
+
+      if (fireTime) {
+        invoke("register_timer", {
+          fireTime,
+          title: todoText,
+          body: "Todo reminder",
+          timerType: "todo",
+          taskName: null,
+        }).catch(e => console.warn("[TF] Failed to register todo reminder:", e));
+      }
+    }
   }
 
   async collapseDashboard() {
@@ -909,6 +951,24 @@ class TaskFlowApp {
     try {
       const newState = await invoke("start_task", { name });
       this._updateTaskBadge(newState.current_task);
+
+      // Register template signal timers (time-based conditions only)
+      if (this._session.template && Array.isArray(this._session.template.signals)) {
+        for (const signal of this._session.template.signals) {
+          const timeMatch = (signal.condition || "").match(/(\d+)\s*m/);
+          if (!timeMatch) continue; // skip non-time-based conditions
+          const minutes = parseInt(timeMatch[1], 10);
+          const fireDate = new Date(Date.now() + minutes * 60000);
+          const fireTime = `${String(fireDate.getHours()).padStart(2, "0")}:${String(fireDate.getMinutes()).padStart(2, "0")}`;
+          invoke("register_timer", {
+            fireTime,
+            title: "Coaching",
+            body: signal.prompt || "",
+            timerType: "signal",
+            taskName: name,
+          }).catch(e => console.warn("[TF] Failed to register signal timer:", e));
+        }
+      }
     } catch (e) {
       console.error("Failed to start task:", e);
     }
@@ -929,6 +989,32 @@ class TaskFlowApp {
       }
     }
     this.close();
+  }
+
+  // ---- Notification overlay ----
+
+  showNotification(payload) {
+    const title = document.getElementById("notification-title");
+    const body = document.getElementById("notification-body");
+    const task = document.getElementById("notification-task");
+    if (title) title.textContent = payload.title || "";
+    if (body) body.textContent = payload.body || "";
+    if (task) {
+      const taskName = payload.taskName || payload.task_name || "";
+      task.textContent = taskName;
+      task.style.display = taskName ? "" : "none";
+    }
+    this.show("notification");
+    if (this._notificationTimer) clearTimeout(this._notificationTimer);
+    this._notificationTimer = setTimeout(() => this.dismissNotification(), 10000);
+  }
+
+  dismissNotification() {
+    if (this._notificationTimer) {
+      clearTimeout(this._notificationTimer);
+      this._notificationTimer = null;
+    }
+    invoke("hide_overlay").catch(() => {});
   }
 
   // ---- Legacy: kept for backward compat with demo() ----
