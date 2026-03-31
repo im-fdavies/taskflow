@@ -110,6 +110,7 @@ pub fn run() {
             register_timer,
             cancel_timer,
             read_pending_timers,
+            search_past_lessons,
         ])
         .setup(|app| {
             // Register the global shortcut

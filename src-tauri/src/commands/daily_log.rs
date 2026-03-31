@@ -9,6 +9,7 @@ pub fn append_daily_log(
     bookmark: Option<String>,
     mode: u8,
     duration_minutes: Option<i64>,
+    lesson: Option<String>,
 ) -> Result<(), String> {
     use std::fs;
 
@@ -46,9 +47,14 @@ pub fn append_daily_log(
     let bookmark_str = bookmark.as_deref().unwrap_or("\u{2014}");
     let exit_str = if exit_capture.is_empty() { "\u{2014}" } else { &exit_capture };
 
+    let lesson_line = match lesson.as_deref() {
+        Some(l) if !l.is_empty() => format!("- **Lesson:** {}\n", l),
+        _ => String::new(),
+    };
+
     let entry = format!(
-        "### {} - {}\n- **Switch:** {}\n- **Task Type:** {}\n- **Duration:** {}\n- **Exit notes:** {}\n- **Bookmark:** {}\n\n",
-        time_str, task_name, mode_label, task_type_str, duration_str, exit_str, bookmark_str
+        "### {} - {}\n- **Switch:** {}\n- **Task Type:** {}\n- **Duration:** {}\n- **Exit notes:** {}\n- **Bookmark:** {}\n{}\n",
+        time_str, task_name, mode_label, task_type_str, duration_str, exit_str, bookmark_str, lesson_line
     );
 
     // Insert before "## Open Tasks" so entries live in the Summary section,
@@ -75,6 +81,7 @@ pub fn append_completion_log(
     follow_ups: Option<String>,
     handoff_notes: Option<String>,
     duration_minutes: Option<i64>,
+    lesson: Option<String>,
 ) -> Result<(), String> {
     use std::fs;
 
@@ -120,9 +127,14 @@ pub fn append_completion_log(
         format!("- **Notes:**\n{}\n", indented.join("\n"))
     };
 
+    let lesson_line = match lesson.as_deref() {
+        Some(l) if !l.is_empty() => format!("- **Lesson:** {}\n", l),
+        _ => String::new(),
+    };
+
     let entry = format!(
-        "### {} - COMPLETED: {}\n- **Outcome:** {}\n- **Duration:** {}\n- **PRs:** {}\n- **Follow-ups:** {}\n- **Handoff:** {}\n{}\n",
-        time_str, task_name, outcome_str, duration_str, pr_str, follow_str, handoff_str, notes_section
+        "### {} - COMPLETED: {}\n- **Outcome:** {}\n- **Duration:** {}\n- **PRs:** {}\n- **Follow-ups:** {}\n- **Handoff:** {}\n{}{}\n",
+        time_str, task_name, outcome_str, duration_str, pr_str, follow_str, handoff_str, notes_section, lesson_line
     );
 
     match find_section_byte_offset(&content, "Completed Work") {

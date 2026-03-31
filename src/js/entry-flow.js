@@ -34,6 +34,7 @@ export async function showTransitionState(session, callbacks) {
       bookmark: session.extractedBookmark || null,
       mode: mode,
       durationMinutes: durationMinutes,
+      lesson: session.lesson || null,
     });
   } catch (e) {
     console.warn("[TaskFlow] Failed to log context switch:", e);

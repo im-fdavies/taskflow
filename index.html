@@ -85,6 +85,10 @@
           </div>
           <button class="btn btn-context" id="exit-context-btn" style="display:none;" onclick="app.loadAgentContext()">⬇ Load agent context</button>
           <div class="exit-context-loaded" id="exit-context-loaded" style="display:none;">Agent context loaded into notes</div>
+          <div class="exit-input-row" id="exit-lesson-row">
+            <label class="input-label">How would you approach this next time?</label>
+            <textarea id="exit-lesson" class="exit-textarea" placeholder="Optional — any insight for future you?" rows="2"></textarea>
+          </div>
         </div>
         <div class="footer">
           <button class="btn" id="exit-skip-btn" style="display:none" onclick="app.skipExit()">Skip</button>
@@ -132,6 +136,11 @@
           <div class="exit-input-row">
             <label class="input-label">Handoff notes</label>
             <textarea id="completion-handoff" class="exit-textarea" placeholder="What would someone else need to know to pick this up?" rows="2"></textarea>
+          </div>
+
+          <div class="exit-input-row">
+            <label class="input-label">How would you approach this next time?</label>
+            <textarea id="completion-lesson" class="exit-textarea" placeholder="Optional — any insight for future you?" rows="2"></textarea>
           </div>
 
           <button class="btn btn-context" id="completion-copy-skill-btn" onclick="app.copyCompletionSkill()">

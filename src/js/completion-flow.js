@@ -93,6 +93,7 @@ export async function submitCompletion(taskName, closeFn) {
       followUps: followups ? followups.value.trim() || null : null,
       handoffNotes: handoff ? handoff.value.trim() || null : null,
       durationMinutes: durationMinutes,
+      lesson: (() => { const el = document.getElementById("completion-lesson"); const v = el ? el.value.trim() : ""; return v || null; })(),
     });
   } catch (e) {
     console.error("[TaskFlow] Completion log failed:", e);

@@ -875,6 +875,7 @@ class TaskFlowApp {
     const result = _skipExitWithExtracted();
     this._session.exitCapture = result.exitCapture;
     this._session.extractedBookmark = result.bookmark;
+    this._session.lesson = result.lesson;
     this.showTransitionState();
   }
 
@@ -887,6 +888,7 @@ class TaskFlowApp {
     if (!result.valid) return;
     this._session.exitCapture = result.exitCapture;
     this._session.extractedBookmark = result.bookmark;
+    this._session.lesson = result.lesson;
     this.showTransitionState();
   }
 
@@ -969,6 +971,22 @@ class TaskFlowApp {
           }).catch(e => console.warn("[TF] Failed to register signal timer:", e));
         }
       }
+
+      // Search for past lessons from similar tasks
+      invoke("search_past_lessons", {
+        taskName: name,
+        templateName: this._session.template?.name || null,
+      }).then(result => {
+        if (result) {
+          setTimeout(() => {
+            this.showNotification({
+              title: "From last time",
+              body: result.lesson,
+              taskName: `${result.fromTask} (${result.fromDate})`,
+            });
+          }, 3000);
+        }
+      }).catch(e => console.warn("[TF] Lesson search failed:", e));
     } catch (e) {
       console.error("Failed to start task:", e);
     }
@@ -994,6 +1012,7 @@ class TaskFlowApp {
   // ---- Notification overlay ----
 
   showNotification(payload) {
+    invoke("expand_for_dashboard").catch(() => {});
     const title = document.getElementById("notification-title");
     const body = document.getElementById("notification-body");
     const task = document.getElementById("notification-task");
@@ -1006,7 +1025,8 @@ class TaskFlowApp {
     }
     this.show("notification");
     if (this._notificationTimer) clearTimeout(this._notificationTimer);
-    this._notificationTimer = setTimeout(() => this.dismissNotification(), 10000);
+    const dismissDelay = (payload.title === "From last time") ? 15000 : 10000;
+    this._notificationTimer = setTimeout(() => this.dismissNotification(), dismissDelay);
   }
 
   dismissNotification() {

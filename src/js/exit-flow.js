@@ -226,15 +226,19 @@ export function submitExit(session) {
 
   const bookmarkNotes = document.getElementById("exit-bookmark");
   const bookmark = bookmarkNotes ? bookmarkNotes.value.trim() : "";
-  return { valid: true, exitCapture, bookmark };
+  const lessonEl = document.getElementById("exit-lesson");
+  const lesson = lessonEl ? lessonEl.value.trim() : "";
+  return { valid: true, exitCapture, bookmark, lesson };
 }
 
 export function skipExitWithExtracted() {
   const notes = document.getElementById("exit-notes");
   const bookmarkNotes = document.getElementById("exit-bookmark");
+  const lessonEl = document.getElementById("exit-lesson");
   return {
     exitCapture: notes ? notes.value.trim() : "",
     bookmark: bookmarkNotes ? bookmarkNotes.value.trim() : "",
+    lesson: lessonEl ? lessonEl.value.trim() : "",
   };
 }
 
