@@ -26,7 +26,7 @@ pub struct TimerEntry {
     pub body: String,
     pub timer_type: String,
     pub task_name: Option<String>,
-    pub handle: Option<tokio::task::JoinHandle<()>>,
+    pub handle: Option<tauri::async_runtime::JoinHandle<()>>,
 }
 
 #[derive(Clone, Serialize)]

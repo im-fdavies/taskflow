@@ -131,7 +131,7 @@ pub(crate) fn spawn_timer(
     let timer_type_for_task = timer_type.clone();
     let task_name_for_task = task_name.clone();
 
-    let handle = tokio::spawn(async move {
+    let handle = tauri::async_runtime::spawn(async move {
         tokio::time::sleep(sleep_duration).await;
 
         // Open overlay
