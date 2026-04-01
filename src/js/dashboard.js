@@ -115,12 +115,30 @@ export async function refreshDashboardTodos() {
 }
 
 async function refreshDoneTodos() {
-  // Right panel DONE section disabled — completed tasks belong on the left panel
-  // (left-panel.js → #dashboard-tasks-done-list). Hide the right panel elements.
   const list = document.getElementById("dashboard-done-list");
   const label = document.getElementById("dashboard-done-label");
-  if (list) list.innerHTML = "";
-  if (label) label.style.display = "none";
+  if (!list) return;
+
+  try {
+    const done = await invoke("read_completed_todos");
+    if (done.length === 0) {
+      list.innerHTML = "";
+      if (label) label.style.display = "none";
+      return;
+    }
+
+    if (label) label.style.display = "";
+    list.innerHTML = "";
+    for (const name of done) {
+      const div = document.createElement("div");
+      div.className = "dashboard-done-item";
+      div.textContent = name;
+      list.appendChild(div);
+    }
+  } catch (e) {
+    list.innerHTML = "";
+    if (label) label.style.display = "none";
+  }
 }
 
 async function completeTodo(todoText, element) {

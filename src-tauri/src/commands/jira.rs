@@ -13,7 +13,7 @@ pub struct JiraTicket {
     pub url: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct JiraCache {
     pub tickets: Vec<JiraTicket>,
 }
@@ -81,6 +81,10 @@ Only output the JSON file, nothing else. If a field is missing, use an empty str
     );
 
     eprintln!("[TaskFlow] Jira refresh: running claude CLI with Atlassian MCP prompt");
+
+    // Snapshot the cache modification time so we can detect if Claude actually wrote to it
+    let pre_modified = cache_path.metadata().ok().and_then(|m| m.modified().ok());
+
     let output = tokio::process::Command::new("claude")
         .arg("-p")
         .arg(&prompt)
@@ -89,6 +93,7 @@ Only output the JSON file, nothing else. If a field is missing, use an empty str
 
     match output {
         Ok(out) => {
+            let stdout_str = String::from_utf8_lossy(&out.stdout);
             if out.status.success() {
                 eprintln!("[TaskFlow] Jira refresh via claude CLI succeeded");
             } else {
@@ -96,15 +101,35 @@ Only output the JSON file, nothing else. If a field is missing, use an empty str
                     "[TaskFlow] Jira refresh: claude CLI exited with status {}",
                     out.status
                 );
-                eprintln!(
-                    "[TaskFlow] Jira refresh stdout: {}",
-                    String::from_utf8_lossy(&out.stdout)
-                );
+                eprintln!("[TaskFlow] Jira refresh stdout: {}", stdout_str);
                 eprintln!(
                     "[TaskFlow] Jira refresh stderr: {}",
                     String::from_utf8_lossy(&out.stderr)
                 );
             }
+
+            // Check if the cache file was actually updated
+            let post_modified = cache_path.metadata().ok().and_then(|m| m.modified().ok());
+            let cache_was_updated = match (pre_modified, post_modified) {
+                (Some(pre), Some(post)) => post > pre,
+                (None, Some(_)) => true,
+                _ => false,
+            };
+
+            if !cache_was_updated {
+                eprintln!("[TaskFlow] Jira refresh: cache file was not updated by Claude CLI, trying stdout parse");
+                // Claude may have printed the JSON to stdout instead of writing the file
+                if let Some(json_start) = stdout_str.find('{') {
+                    let json_candidate = &stdout_str[json_start..];
+                    if let Ok(cache) = serde_json::from_str::<JiraCache>(json_candidate) {
+                        eprintln!("[TaskFlow] Jira refresh: parsed {} tickets from stdout, writing cache", cache.tickets.len());
+                        if let Ok(json) = serde_json::to_string_pretty(&cache) {
+                            let _ = std::fs::write(&cache_path, json);
+                        }
+                    }
+                }
+            }
+
             read_jira_tickets()
         }
         Err(e) => {
