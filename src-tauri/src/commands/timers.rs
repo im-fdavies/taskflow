@@ -1,6 +1,7 @@
 use crate::helpers::config::logs_dir;
 use crate::helpers::markdown::{
-    daily_log_skeleton, ensure_log_sections, find_section_byte_offset,
+    ensure_trailing_newline, find_section_byte_offset,
+    read_and_normalize_log,
 };
 use crate::state::{AppState, TimerEntry, TimerInfo};
 use chrono::{Local, Timelike};
@@ -102,11 +103,7 @@ fn update_timer_log_status(timer_id: &str, new_status: &str) {
     }
 
     let new_content = lines.join("\n");
-    let final_content = if content.ends_with('\n') && !new_content.ends_with('\n') {
-        format!("{}\n", new_content)
-    } else {
-        new_content
-    };
+    let final_content = ensure_trailing_newline(&new_content);
     let _ = fs::write(&log_path, final_content);
 }
 
@@ -150,7 +147,11 @@ pub(crate) fn spawn_timer(
         }
 
         // Update log entry status from pending to fired
-        update_timer_log_status(&id_for_task, "fired");
+        {
+            let state = app_clone.state::<AppState>();
+            let _lock = state.file_lock.lock().unwrap();
+            update_timer_log_status(&id_for_task, "fired");
+        }
 
         // Remove from in-memory timers
         let state = app_clone.state::<AppState>();
@@ -183,9 +184,10 @@ pub fn register_timer(
     body: String,
     timer_type: String,
     task_name: Option<String>,
-    _state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, AppState>,
 ) -> Result<String, String> {
     use std::fs;
+    let _lock = state.file_lock.lock().unwrap();
 
     let id = timer_id(&fire_time, &title);
 
@@ -201,12 +203,7 @@ pub fn register_timer(
     let time_str = now.format("%H:%M").to_string();
     let log_path = logs_dir.join(format!("{}.md", date_str));
 
-    let raw_content = if log_path.exists() {
-        fs::read_to_string(&log_path).map_err(|e| format!("Failed to read log: {}", e))?
-    } else {
-        daily_log_skeleton(&date_str)
-    };
-    let content = ensure_log_sections(&raw_content, &date_str);
+    let content = read_and_normalize_log(&log_path, &date_str)?;
 
     let task_str = task_name.as_deref().unwrap_or("\u{2014}");
     let entry = format!(
@@ -231,7 +228,7 @@ pub fn register_timer(
         None => format!("{}\n# Timers\n\n{}", content, entry),
     };
 
-    fs::write(&log_path, new_content).map_err(|e| format!("Failed to write log: {}", e))?;
+    fs::write(&log_path, ensure_trailing_newline(&new_content)).map_err(|e| format!("Failed to write log: {}", e))?;
 
     // Spawn the timer (also inserts into state.timers)
     spawn_timer(
@@ -260,6 +257,7 @@ pub fn cancel_timer(
                 handle.abort();
             }
             drop(timers); // Release lock before file I/O
+            let _lock = state.file_lock.lock().unwrap();
             update_timer_log_status(&timer_id, "cancelled");
             Ok(())
         }

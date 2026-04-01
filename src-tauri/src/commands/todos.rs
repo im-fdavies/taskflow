@@ -1,4 +1,5 @@
-use crate::helpers::markdown::{find_section_byte_offset, daily_log_skeleton, ensure_log_sections, extract_section};
+use crate::helpers::markdown::{find_section_byte_offset, daily_log_skeleton, ensure_log_sections, extract_section, ensure_trailing_newline, read_and_normalize_log};
+use crate::state::AppState;
 use chrono::Local;
 use serde::Serialize;
 
@@ -61,6 +62,62 @@ fn all_completed_names() -> std::collections::HashSet<String> {
         }
     }
     completed
+}
+
+// ---------------------------------------------------------------------------
+// Block-aware entry removal
+// ---------------------------------------------------------------------------
+
+/// Remove an H3 entry block (heading + metadata/notes) from the # Todos section,
+/// preserving blank lines between sections.
+fn remove_todo_block(content: &str, todo_text: &str) -> String {
+    let search = format!(" - {}", todo_text);
+    let bracket_pattern = format!("{} [", todo_text);
+    let is_target = |line: &str| -> bool {
+        line.starts_with("### ")
+            && (line.ends_with(&search) || line.contains(&bracket_pattern))
+    };
+
+    let mut new_lines: Vec<&str> = Vec::new();
+    let mut in_todos = false;
+    let mut skipping_entry = false;
+    let mut pending_blanks: Vec<&str> = Vec::new();
+
+    for line in content.lines() {
+        if line.trim().is_empty() {
+            pending_blanks.push(line);
+            continue;
+        }
+
+        if line.starts_with("# ") && !line.starts_with("## ") && !line.starts_with("### ") {
+            new_lines.extend(pending_blanks.drain(..));
+            in_todos = line.trim() == "# Todos";
+            skipping_entry = false;
+            new_lines.push(line);
+            continue;
+        }
+
+        if in_todos && line.starts_with("### ") {
+            if is_target(line) {
+                new_lines.extend(pending_blanks.drain(..));
+                skipping_entry = true;
+                continue;
+            } else {
+                new_lines.extend(pending_blanks.drain(..));
+                skipping_entry = false;
+            }
+        }
+
+        if skipping_entry {
+            pending_blanks.clear();
+        } else {
+            new_lines.extend(pending_blanks.drain(..));
+            new_lines.push(line);
+        }
+    }
+
+    new_lines.extend(pending_blanks.drain(..));
+    new_lines.join("\n")
 }
 
 // ---------------------------------------------------------------------------
@@ -358,8 +415,9 @@ pub fn read_daily_summary() -> Option<String> {
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub fn append_todo_entry(task_name: String, priority: Option<String>) -> Result<(), String> {
+pub fn append_todo_entry(task_name: String, priority: Option<String>, state: tauri::State<'_, AppState>) -> Result<(), String> {
     use std::fs;
+    let _lock = state.file_lock.lock().unwrap();
 
     let logs_dir = crate::helpers::config::logs_dir();
     fs::create_dir_all(&logs_dir).map_err(|e| format!("Failed to create logs dir: {}", e))?;
@@ -369,22 +427,16 @@ pub fn append_todo_entry(task_name: String, priority: Option<String>) -> Result<
     let time_str = now.format("%H:%M").to_string();
     let log_path = logs_dir.join(format!("{}.md", date_str));
 
-    let raw_content = if log_path.exists() {
-        fs::read_to_string(&log_path).map_err(|e| format!("Failed to read log: {}", e))?
-    } else {
-        daily_log_skeleton(&date_str)
-    };
-
     // Ensure v2 sections exist (handles legacy log files)
-    let content = ensure_log_sections(&raw_content, &date_str);
+    let content = read_and_normalize_log(&log_path, &date_str)?;
 
     let entry = match priority.as_deref() {
         Some(p) if !p.is_empty() => format!("### {} - {} [{}]\n\n", time_str, task_name, p),
         _ => format!("### {} - {}\n\n", time_str, task_name),
     };
 
-    // Insert before ## Completed Work (which is right after ## Todos section)
-    let new_content = match find_section_byte_offset(&content, "Completed Work") {
+    // Insert before ## Timers (which is the next section after ## Todos)
+    let new_content = match find_section_byte_offset(&content, "Timers") {
         Some(pos) => {
             let before = content[..pos].trim_end();
             format!("{}\n\n{}{}", before, entry, &content[pos..])
@@ -392,14 +444,15 @@ pub fn append_todo_entry(task_name: String, priority: Option<String>) -> Result<
         None => format!("{}{}", content, entry),
     };
 
-    fs::write(&log_path, new_content).map_err(|e| format!("Failed to write log: {}", e))?;
+    fs::write(&log_path, ensure_trailing_newline(&new_content)).map_err(|e| format!("Failed to write log: {}", e))?;
 
     Ok(())
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub fn update_todo_entry(old_name: String, new_name: String, priority: Option<String>) -> Result<(), String> {
+pub fn update_todo_entry(old_name: String, new_name: String, priority: Option<String>, state: tauri::State<'_, AppState>) -> Result<(), String> {
     use std::fs;
+    let _lock = state.file_lock.lock().unwrap();
 
     let old_suffix = format!(" - {}", old_name);
     let new_name_str = match priority.as_deref() {
@@ -409,12 +462,11 @@ pub fn update_todo_entry(old_name: String, new_name: String, priority: Option<St
     let new_suffix = format!(" - {}", new_name_str);
 
     for path in all_log_files() {
-        let raw = match fs::read_to_string(&path) {
+        let date_str = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        let content = match read_and_normalize_log(&path, &date_str) {
             Ok(c) => c,
             Err(_) => continue,
         };
-        let date_str = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
-        let content = ensure_log_sections(&raw, &date_str);
 
         let found = content.lines().any(|line| {
             line.starts_with("### ")
@@ -440,6 +492,7 @@ pub fn update_todo_entry(old_name: String, new_name: String, priority: Option<St
                 })
                 .collect::<Vec<_>>()
                 .join("\n");
+            let new_content = ensure_trailing_newline(&new_content);
             fs::write(&path, new_content).map_err(|e| format!("Failed to write log: {}", e))?;
             return Ok(());
         }
@@ -450,20 +503,20 @@ pub fn update_todo_entry(old_name: String, new_name: String, priority: Option<St
 
 /// Move a todo from ## Todos to ## Completed Work
 #[tauri::command(rename_all = "camelCase")]
-pub fn complete_todo_entry(todo_text: String) -> Result<(), String> {
+pub fn complete_todo_entry(todo_text: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
     use std::fs;
+    let _lock = state.file_lock.lock().unwrap();
 
     let now = Local::now();
     let time_str = now.format("%H:%M").to_string();
     let search = format!(" - {}", todo_text);
 
     for path in all_log_files() {
-        let raw = match fs::read_to_string(&path) {
+        let date_str = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        let content = match read_and_normalize_log(&path, &date_str) {
             Ok(c) => c,
             Err(_) => continue,
         };
-        let date_str = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
-        let content = ensure_log_sections(&raw, &date_str);
 
         let found = content.lines().any(|line| {
             line.starts_with("### ")
@@ -471,16 +524,8 @@ pub fn complete_todo_entry(todo_text: String) -> Result<(), String> {
         });
 
         if found {
-            // Remove from source file
-            let new_content = content
-                .lines()
-                .filter(|line| {
-                    !(line.starts_with("### ")
-                        && (line.ends_with(&search)
-                            || line.contains(&format!("{} [", todo_text))))
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
+            // Remove entry block from source file
+            let new_content = ensure_trailing_newline(&remove_todo_block(&content, &todo_text));
             fs::write(&path, &new_content)
                 .map_err(|e| format!("Failed to write log: {}", e))?;
 
@@ -508,7 +553,7 @@ pub fn complete_todo_entry(todo_text: String) -> Result<(), String> {
                 }
                 None => today_content.push_str(&entry),
             }
-            fs::write(&today_path, today_content)
+            fs::write(&today_path, ensure_trailing_newline(&today_content))
                 .map_err(|e| format!("Failed to write today's log: {}", e))?;
 
             return Ok(());
@@ -552,18 +597,18 @@ pub fn read_completed_todos() -> Vec<String> {
 
 /// Remove a todo entirely from the log
 #[tauri::command(rename_all = "camelCase")]
-pub fn discard_todo_entry(todo_text: String) -> Result<(), String> {
+pub fn discard_todo_entry(todo_text: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
     use std::fs;
+    let _lock = state.file_lock.lock().unwrap();
 
     let search = format!(" - {}", todo_text);
 
     for path in all_log_files() {
-        let raw = match fs::read_to_string(&path) {
+        let date_str = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        let content = match read_and_normalize_log(&path, &date_str) {
             Ok(c) => c,
             Err(_) => continue,
         };
-        let date_str = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
-        let content = ensure_log_sections(&raw, &date_str);
 
         let found = content.lines().any(|line| {
             line.starts_with("### ")
@@ -571,15 +616,7 @@ pub fn discard_todo_entry(todo_text: String) -> Result<(), String> {
         });
 
         if found {
-            let new_content = content
-                .lines()
-                .filter(|line| {
-                    !(line.starts_with("### ")
-                        && (line.ends_with(&search)
-                            || line.contains(&format!("{} [", todo_text))))
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
+            let new_content = ensure_trailing_newline(&remove_todo_block(&content, &todo_text));
             fs::write(&path, new_content)
                 .map_err(|e| format!("Failed to write log: {}", e))?;
             return Ok(());

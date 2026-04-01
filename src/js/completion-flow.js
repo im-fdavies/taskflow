@@ -86,7 +86,7 @@ export async function submitCompletion(taskName, closeFn) {
       if (durationMinutes < 0) durationMinutes = null;
     }
 
-    invoke("append_completion_log", {
+    await invoke("append_completion_log", {
       taskName: taskName || "Unknown",
       outcome: outcome ? outcome.value.trim() : "",
       prLinks: prs ? prs.value.trim() || null : null,

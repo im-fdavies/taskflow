@@ -86,6 +86,29 @@ pub(crate) fn ensure_log_sections(content: &str, date_str: &str) -> String {
     result
 }
 
+/// Read a daily log file, ensure all sections exist, and persist if changed.
+/// Returns the normalized content.
+pub(crate) fn read_and_normalize_log(log_path: &std::path::Path, date_str: &str) -> Result<String, String> {
+    let raw = if log_path.exists() {
+        std::fs::read_to_string(log_path)
+            .map_err(|e| format!("Failed to read log: {}", e))?
+    } else {
+        daily_log_skeleton(date_str)
+    };
+    let normalized = ensure_log_sections(&raw, date_str);
+    if normalized != raw {
+        std::fs::write(log_path, ensure_trailing_newline(&normalized))
+            .map_err(|e| format!("Failed to write normalized log: {}", e))?;
+    }
+    Ok(normalized)
+}
+
+/// Ensure content ends with exactly one newline.
+pub(crate) fn ensure_trailing_newline(content: &str) -> String {
+    let trimmed = content.trim_end();
+    format!("{}\n", trimmed)
+}
+
 /// Extracts the body text of a named `# Heading` section from a log file.
 /// Returns everything between the heading and the next `# ` heading (or EOF).
 pub(crate) fn extract_section(content: &str, heading: &str) -> String {

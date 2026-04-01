@@ -68,6 +68,7 @@ pub fn run() {
             ollama_available: Mutex::new(None),
             shortcut_pressed_at: Mutex::new(None),
             timers: Mutex::new(std::collections::HashMap::new()),
+            file_lock: Mutex::new(()),
         })
         .invoke_handler(tauri::generate_handler![
             get_state,

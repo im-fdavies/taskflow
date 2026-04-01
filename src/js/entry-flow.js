@@ -27,7 +27,7 @@ export async function showTransitionState(session, callbacks) {
       durationMinutes = Math.round((now.getHours() * 60 + now.getMinutes()) - (h * 60 + m));
       if (durationMinutes < 0) durationMinutes = null;
     }
-    invoke("append_daily_log", {
+    await invoke("append_daily_log", {
       taskName: previousState.current_task || "Unknown",
       taskType: session.template?.name || null,
       exitCapture: exitCapture || "",

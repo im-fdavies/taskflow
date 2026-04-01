@@ -47,4 +47,6 @@ pub struct AppState {
     // Tracks when Cmd+Shift+Space was pressed to measure hold duration.
     pub shortcut_pressed_at: Mutex<Option<std::time::Instant>>,
     pub timers: Mutex<HashMap<String, TimerEntry>>,
+    // Serialises read-modify-write cycles on daily markdown log files.
+    pub file_lock: Mutex<()>,
 }

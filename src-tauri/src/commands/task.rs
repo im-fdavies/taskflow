@@ -22,7 +22,10 @@ pub fn start_task(app: AppHandle, name: String, state: tauri::State<'_, AppState
     }
 
     // Write to Open Tasks in today's log
-    add_to_open_tasks(&name);
+    {
+        let _lock = state.file_lock.lock().unwrap();
+        add_to_open_tasks(&name);
+    }
 
     let result = {
         let mut task = state.task.lock().expect("task state lock poisoned");
@@ -70,7 +73,7 @@ pub fn get_task_elapsed(state: tauri::State<'_, AppState>) -> Option<String> {
 
 fn add_to_open_tasks(task_name: &str) {
     use std::fs;
-    use crate::helpers::markdown::{daily_log_skeleton, ensure_log_sections, find_section_byte_offset, extract_section};
+    use crate::helpers::markdown::{daily_log_skeleton, ensure_log_sections, ensure_trailing_newline, find_section_byte_offset, extract_section};
 
     let logs_dir = crate::helpers::config::logs_dir();
     let _ = fs::create_dir_all(&logs_dir);
@@ -109,5 +112,5 @@ fn add_to_open_tasks(task_name: &str) {
         None => format!("{}{}", content, entry),
     };
 
-    let _ = fs::write(&log_path, new_content);
+    let _ = fs::write(&log_path, ensure_trailing_newline(&new_content));
 }

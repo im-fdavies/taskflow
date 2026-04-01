@@ -1,4 +1,5 @@
-use crate::helpers::markdown::{find_section_byte_offset, daily_log_skeleton, ensure_log_sections, extract_section};
+use crate::helpers::markdown::{find_section_byte_offset, extract_section, ensure_trailing_newline, read_and_normalize_log};
+use crate::state::AppState;
 use chrono::Local;
 
 #[tauri::command(rename_all = "camelCase")]
@@ -10,8 +11,10 @@ pub fn append_daily_log(
     mode: u8,
     duration_minutes: Option<i64>,
     lesson: Option<String>,
+    state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     use std::fs;
+    let _lock = state.file_lock.lock().unwrap();
 
     let logs_dir = crate::helpers::config::logs_dir();
     fs::create_dir_all(&logs_dir).map_err(|e| format!("Failed to create logs dir: {}", e))?;
@@ -21,11 +24,7 @@ pub fn append_daily_log(
     let time_str = now.format("%H:%M").to_string();
     let log_path = logs_dir.join(format!("{}.md", date_str));
 
-    let content = if log_path.exists() {
-        fs::read_to_string(&log_path).map_err(|e| format!("Failed to read log file: {}", e))?
-    } else {
-        daily_log_skeleton(&date_str)
-    };
+    let content = read_and_normalize_log(&log_path, &date_str)?;
 
     let mode_label = match mode {
         1 => "Full",
@@ -68,7 +67,7 @@ pub fn append_daily_log(
         None => format!("{}{}", content, entry),
     };
 
-    fs::write(&log_path, new_content).map_err(|e| format!("Failed to write log file: {}", e))?;
+    fs::write(&log_path, ensure_trailing_newline(&new_content)).map_err(|e| format!("Failed to write log file: {}", e))?;
 
     Ok(())
 }
@@ -82,8 +81,10 @@ pub fn append_completion_log(
     handoff_notes: Option<String>,
     duration_minutes: Option<i64>,
     lesson: Option<String>,
+    state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     use std::fs;
+    let _lock = state.file_lock.lock().unwrap();
 
     let logs_dir = crate::helpers::config::logs_dir();
     fs::create_dir_all(&logs_dir).map_err(|e| format!("Failed to create logs dir: {}", e))?;
@@ -93,12 +94,7 @@ pub fn append_completion_log(
     let time_str = now.format("%H:%M").to_string();
     let log_path = logs_dir.join(format!("{}.md", date_str));
 
-    let raw_content = if log_path.exists() {
-        fs::read_to_string(&log_path).map_err(|e| format!("Failed to read log file: {}", e))?
-    } else {
-        daily_log_skeleton(&date_str)
-    };
-    let mut content = ensure_log_sections(&raw_content, &date_str);
+    let mut content = read_and_normalize_log(&log_path, &date_str)?;
 
     let duration_str = match duration_minutes {
         Some(d) if d > 0 => {
@@ -150,14 +146,14 @@ pub fn append_completion_log(
         }
     }
 
-    fs::write(&log_path, content).map_err(|e| format!("Failed to write log file: {}", e))?;
+    fs::write(&log_path, ensure_trailing_newline(&content)).map_err(|e| format!("Failed to write log file: {}", e))?;
 
     Ok(())
 }
 
 fn remove_from_open_tasks(task_name: &str) -> String {
     use std::fs;
-    use crate::helpers::markdown::{ensure_log_sections, extract_section};
+    use crate::helpers::markdown::{ensure_log_sections, extract_section, ensure_trailing_newline};
 
     let logs_dir = crate::helpers::config::logs_dir();
     let mut files: Vec<std::path::PathBuf> = match std::fs::read_dir(&logs_dir) {
@@ -186,44 +182,51 @@ fn remove_from_open_tasks(task_name: &str) -> String {
             continue;
         }
 
-        // Remove the H3 entry and any content below it until the next H3 or section end
+        // Remove the H3 entry and any content below it until the next H3 or section end.
+        // Blank lines are buffered so section spacing is preserved after removal.
         let mut new_lines: Vec<&str> = Vec::new();
         let mut captured_lines: Vec<&str> = Vec::new();
         let mut in_open_tasks = false;
         let mut skipping_entry = false;
+        let mut pending_blanks: Vec<&str> = Vec::new();
 
         for line in content.lines() {
+            if line.trim().is_empty() {
+                pending_blanks.push(line);
+                continue;
+            }
+
             if line.starts_with("# ") && !line.starts_with("## ") && !line.starts_with("### ") {
-                if line.trim() == "# Open Tasks" {
-                    in_open_tasks = true;
-                    skipping_entry = false;
-                    new_lines.push(line);
-                    continue;
-                } else {
-                    in_open_tasks = false;
-                    skipping_entry = false;
-                    new_lines.push(line);
-                    continue;
-                }
+                new_lines.extend(pending_blanks.drain(..));
+                in_open_tasks = line.trim() == "# Open Tasks";
+                skipping_entry = false;
+                new_lines.push(line);
+                continue;
             }
 
             if in_open_tasks && line.starts_with("### ") {
                 if line.trim() == target {
+                    new_lines.extend(pending_blanks.drain(..));
                     skipping_entry = true;
                     continue;
                 } else {
+                    new_lines.extend(pending_blanks.drain(..));
                     skipping_entry = false;
                 }
             }
 
             if skipping_entry {
+                captured_lines.extend(pending_blanks.drain(..));
                 captured_lines.push(line);
             } else {
+                new_lines.extend(pending_blanks.drain(..));
                 new_lines.push(line);
             }
         }
 
-        let new_content = new_lines.join("\n");
+        new_lines.extend(pending_blanks.drain(..));
+
+        let new_content = ensure_trailing_newline(&new_lines.join("\n"));
         let _ = fs::write(&path, new_content);
         return captured_lines.join("\n").trim().to_string();
     }
@@ -231,8 +234,9 @@ fn remove_from_open_tasks(task_name: &str) -> String {
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub fn append_note(note_text: String) -> Result<(), String> {
+pub fn append_note(note_text: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
     use std::fs;
+    let _lock = state.file_lock.lock().unwrap();
 
     let logs_dir = crate::helpers::config::logs_dir();
     fs::create_dir_all(&logs_dir).map_err(|e| format!("Failed to create logs dir: {}", e))?;
@@ -242,12 +246,7 @@ pub fn append_note(note_text: String) -> Result<(), String> {
     let time_str = now.format("%H:%M").to_string();
     let log_path = logs_dir.join(format!("{}.md", date_str));
 
-    let raw_content = if log_path.exists() {
-        fs::read_to_string(&log_path).map_err(|e| format!("Failed to read log: {}", e))?
-    } else {
-        daily_log_skeleton(&date_str)
-    };
-    let content = ensure_log_sections(&raw_content, &date_str);
+    let content = read_and_normalize_log(&log_path, &date_str)?;
 
     let entry = format!("- \u{1F4DD} {} \u{2014} {}\n", time_str, note_text);
 
@@ -268,7 +267,7 @@ pub fn append_note(note_text: String) -> Result<(), String> {
         insert_note_in_summary(&content, &entry)
     };
 
-    fs::write(&log_path, new_content).map_err(|e| format!("Failed to write log: {}", e))?;
+    fs::write(&log_path, ensure_trailing_newline(&new_content)).map_err(|e| format!("Failed to write log: {}", e))?;
     Ok(())
 }
 
@@ -314,7 +313,7 @@ fn insert_note_under_task(content: &str, task_name: &str, entry: &str) -> String
             // Insert the entry line(s) at the found position
             let entry_trimmed = entry.trim_end_matches('\n');
             lines.insert(idx, entry_trimmed);
-            lines.join("\n")
+            ensure_trailing_newline(&lines.join("\n"))
         }
         None => {
             // Shouldn't happen, but fall back to summary
@@ -335,8 +334,9 @@ fn insert_note_in_summary(content: &str, entry: &str) -> String {
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub fn append_task_note(task_name: String, note_text: String) -> Result<(), String> {
+pub fn append_task_note(task_name: String, note_text: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
     use std::fs;
+    let _lock = state.file_lock.lock().unwrap();
 
     let logs_dir = crate::helpers::config::logs_dir();
     fs::create_dir_all(&logs_dir).map_err(|e| format!("Failed to create logs dir: {}", e))?;
@@ -357,18 +357,17 @@ pub fn append_task_note(task_name: String, note_text: String) -> Result<(), Stri
     files.sort_by(|a, b| b.cmp(a));
 
     for path in &files {
-        let raw = match fs::read_to_string(path) {
+        let date_str = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        let content = match read_and_normalize_log(path, &date_str) {
             Ok(c) => c,
             Err(_) => continue,
         };
-        let date_str = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
-        let content = ensure_log_sections(&raw, &date_str);
         let open_section = extract_section(&content, "Open Tasks");
         let target = format!("### {}", task_name);
 
         if open_section.lines().any(|l| l.trim() == target) {
             let new_content = insert_note_under_task(&content, &task_name, &entry);
-            fs::write(path, new_content).map_err(|e| format!("Failed to write log: {}", e))?;
+            fs::write(path, ensure_trailing_newline(&new_content)).map_err(|e| format!("Failed to write log: {}", e))?;
             return Ok(());
         }
     }
@@ -377,14 +376,7 @@ pub fn append_task_note(task_name: String, note_text: String) -> Result<(), Stri
     let date_str = now.format("%Y-%m-%d").to_string();
     let log_path = logs_dir.join(format!("{}.md", date_str));
 
-    let raw_content = if log_path.exists() {
-        fs::read_to_string(&log_path).map_err(|e| format!("Failed to read log: {}", e))?
-    } else {
-        daily_log_skeleton(&date_str)
-    };
-    let content = ensure_log_sections(&raw_content, &date_str);
-
-    // Insert a new H3 heading for this task in Open Tasks, then add the note
+    let content = read_and_normalize_log(&log_path, &date_str)?;
     let task_heading = format!("### {}\n{}", task_name, entry);
     let new_content = match find_section_byte_offset(&content, "Open Tasks") {
         Some(pos) => {
@@ -394,6 +386,6 @@ pub fn append_task_note(task_name: String, note_text: String) -> Result<(), Stri
         None => format!("{}\n{}", content, task_heading),
     };
 
-    fs::write(&log_path, new_content).map_err(|e| format!("Failed to write log: {}", e))?;
+    fs::write(&log_path, ensure_trailing_newline(&new_content)).map_err(|e| format!("Failed to write log: {}", e))?;
     Ok(())
 }
