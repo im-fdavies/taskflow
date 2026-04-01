@@ -85,6 +85,10 @@ export function showExitState(session, callbacks) {
   if (bookmarkRow) bookmarkRow.style.display = showBookmark ? 'flex' : 'none';
   if (bookmarkNotes) bookmarkNotes.value = '';
 
+  // Hide lesson field when pausing (only show on full context switches)
+  const lessonRow = document.getElementById('exit-lesson-row');
+  if (lessonRow) lessonRow.style.display = session.pauseOnly ? 'none' : '';
+
   if (extractedBookmark && bookmarkNotes && showBookmark) {
     bookmarkNotes.value = extractedBookmark;
     bookmarkNotes.classList.add("prefilled");
