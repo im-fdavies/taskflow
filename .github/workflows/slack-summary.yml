@@ -1,0 +1,25 @@
+name: Slack Morning Summary
+
+on:
+  schedule:
+    # 09:45 UTC Mon-Fri (adjust if you want BST — GitHub cron is UTC)
+    - cron: '45 9 * * 1-5'
+  workflow_dispatch: # manual trigger for testing
+
+jobs:
+  post-summary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Slack summary
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DROPBOX_ACCESS_TOKEN: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
+          DROPBOX_LOGS_PATH: ${{ vars.DROPBOX_LOGS_PATH || '/DailyNotes' }}
+        run: node scripts/slack-morning-summary-cloud.mjs
