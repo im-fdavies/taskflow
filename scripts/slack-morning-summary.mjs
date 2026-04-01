@@ -144,9 +144,10 @@ async function callClaude(log, apiKey) {
         max_tokens: 500,
         system:
           "You summarise daily work logs into concise second-person Slack messages. " +
+          "This log is from YESTERDAY, not today. " +
           "Use plain text, no markdown headers. Keep it under 200 words. " +
           "Be direct and useful — mention task names, what got done, what's still open, " +
-          "and any todos. Start with a greeting like 'Morning!' or 'Hey —'.",
+          "and any todos. Start with something like 'Here's a summary of yesterday:' or 'Yesterday's recap:'.",
         messages: [{ role: "user", content: log }],
       }),
       signal: controller.signal,
