@@ -43,8 +43,8 @@ pub fn read_jira_tickets() -> Vec<JiraTicket> {
     }
 }
 
-/// Shell out to the `claude` CLI to fetch current sprint tickets via Atlassian MCP
-/// and write them to `~/.taskflow/jira-cache.json`. Returns the updated ticket list.
+/// Shell out to the `claude` CLI to fetch current sprint tickets via Atlassian MCP.
+/// Parses JSON from stdout and writes to `~/.taskflow/jira-cache.json`.
 /// Falls back to the existing cache if the CLI call fails.
 #[tauri::command(rename_all = "camelCase")]
 pub async fn refresh_jira_cache() -> Vec<JiraTicket> {
@@ -55,15 +55,14 @@ pub async fn refresh_jira_cache() -> Vec<JiraTicket> {
 
     let cache_path = home.join(".taskflow/jira-cache.json");
 
-    let prompt = format!(
-        r#"Use the searchJiraIssuesUsingJql MCP tool to fetch my current sprint tickets. Use these parameters:
+    let prompt = r#"Use the searchJiraIssuesUsingJql MCP tool to fetch my current sprint tickets. Use these parameters:
 - cloudId: "1acbc93f-17e5-4c15-86d6-a839a70c83e0"
 - jql: "assignee = currentUser() AND sprint in openSprints()"
 
-Then write the results to {} as JSON in this exact format:
-{{
+Output the results as JSON in this exact format (output ONLY the JSON, no other text):
+{
   "tickets": [
-    {{
+    {
       "key": "PROJ-123",
       "summary": "Ticket title",
       "status": "In Progress",
@@ -72,62 +71,73 @@ Then write the results to {} as JSON in this exact format:
       "issueType": "Dev Task",
       "parentKey": "PROJ-100",
       "url": "https://immediateco.atlassian.net/browse/PROJ-123"
-    }}
+    }
   ]
-}}
+}
 
-Only output the JSON file, nothing else. If a field is missing, use an empty string. parentKey can be null if there is no parent."#,
-        cache_path.display()
-    );
+If a field is missing, use an empty string. parentKey can be null if there is no parent."#;
 
     eprintln!("[TaskFlow] Jira refresh: running claude CLI with Atlassian MCP prompt");
 
-    // Snapshot the cache modification time so we can detect if Claude actually wrote to it
-    let pre_modified = cache_path.metadata().ok().and_then(|m| m.modified().ok());
-
     let output = tokio::process::Command::new("claude")
-        .arg("-p")
-        .arg(&prompt)
-        .output()
-        .await;
+        .args([
+            "-p",
+            "--allowedTools",
+            "mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql",
+        ])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .and_then(|mut child| {
+            use tokio::io::AsyncWriteExt;
+            // Write prompt via a blocking task since we need the child handle back
+            let stdin = child.stdin.take();
+            tokio::spawn(async move {
+                if let Some(mut stdin) = stdin {
+                    let _ = stdin.write_all(prompt.as_bytes()).await;
+                    let _ = stdin.shutdown().await;
+                }
+            });
+            Ok(child)
+        });
 
-    match output {
+    let result = match output {
+        Ok(child) => child.wait_with_output().await,
+        Err(e) => {
+            eprintln!("[TaskFlow] Failed to spawn claude CLI: {}", e);
+            return read_jira_tickets();
+        }
+    };
+
+    match result {
         Ok(out) => {
             let stdout_str = String::from_utf8_lossy(&out.stdout);
-            if out.status.success() {
-                eprintln!("[TaskFlow] Jira refresh via claude CLI succeeded");
-            } else {
+            if !out.status.success() {
                 eprintln!(
                     "[TaskFlow] Jira refresh: claude CLI exited with status {}",
                     out.status
                 );
-                eprintln!("[TaskFlow] Jira refresh stdout: {}", stdout_str);
-                eprintln!(
-                    "[TaskFlow] Jira refresh stderr: {}",
-                    String::from_utf8_lossy(&out.stderr)
-                );
+                eprintln!("[TaskFlow] Jira refresh stderr: {}",
+                    String::from_utf8_lossy(&out.stderr));
+                return read_jira_tickets();
             }
 
-            // Check if the cache file was actually updated
-            let post_modified = cache_path.metadata().ok().and_then(|m| m.modified().ok());
-            let cache_was_updated = match (pre_modified, post_modified) {
-                (Some(pre), Some(post)) => post > pre,
-                (None, Some(_)) => true,
-                _ => false,
-            };
+            eprintln!("[TaskFlow] Jira refresh via claude CLI succeeded");
 
-            if !cache_was_updated {
-                eprintln!("[TaskFlow] Jira refresh: cache file was not updated by Claude CLI, trying stdout parse");
-                // Claude may have printed the JSON to stdout instead of writing the file
-                if let Some(json_start) = stdout_str.find('{') {
-                    let json_candidate = &stdout_str[json_start..];
-                    if let Ok(cache) = serde_json::from_str::<JiraCache>(json_candidate) {
-                        eprintln!("[TaskFlow] Jira refresh: parsed {} tickets from stdout, writing cache", cache.tickets.len());
-                        if let Ok(json) = serde_json::to_string_pretty(&cache) {
-                            let _ = std::fs::write(&cache_path, json);
-                        }
+            // Parse JSON from stdout and write cache
+            if let Some(json_start) = stdout_str.find('{') {
+                let json_candidate = &stdout_str[json_start..];
+                if let Ok(cache) = serde_json::from_str::<JiraCache>(json_candidate) {
+                    eprintln!("[TaskFlow] Jira refresh: parsed {} tickets from stdout", cache.tickets.len());
+                    if let Ok(json) = serde_json::to_string_pretty(&cache) {
+                        let _ = std::fs::write(&cache_path, json);
                     }
+                } else {
+                    eprintln!("[TaskFlow] Jira refresh: failed to parse JSON from stdout");
                 }
+            } else {
+                eprintln!("[TaskFlow] Jira refresh: no JSON found in stdout");
             }
 
             read_jira_tickets()
