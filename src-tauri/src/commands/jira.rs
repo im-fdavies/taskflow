@@ -82,6 +82,7 @@ If a field is missing, use an empty string. parentKey can be null if there is no
     let output = tokio::process::Command::new("claude")
         .args([
             "-p",
+            "--permission-mode", "bypassPermissions",
             "--allowedTools",
             "mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql",
         ])
